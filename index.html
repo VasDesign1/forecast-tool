@@ -714,18 +714,57 @@
         // 2) Items with Order Quantities (via OData — exposes Qty on Sales/Purch Order fields)
         async function bcFetchItems() {
             var coName = encodeURIComponent(BC_CONFIG.companyName);
+            // First fetch 1 item without $select to discover actual field names
+            updateBCStatus("Discovering item field names...");
+            var sampleData = await bcFetch(
+                BC_ODATA_URL + "/Company('" + coName + "')/Items?$top=1"
+            );
+            var sampleFields = (sampleData.value && sampleData.value.length > 0) ? Object.keys(sampleData.value[0]) : [];
+            console.log("Available Item fields:", sampleFields);
+
+            // Find the correct field names (BC/Wiise may use different naming)
+            function findField(candidates) {
+                for (var c = 0; c < candidates.length; c++) {
+                    var lower = candidates[c].toLowerCase();
+                    for (var f = 0; f < sampleFields.length; f++) {
+                        if (sampleFields[f].toLowerCase() === lower) return sampleFields[f];
+                    }
+                }
+                // Partial match fallback
+                for (var c = 0; c < candidates.length; c++) {
+                    var lower = candidates[c].toLowerCase();
+                    for (var f = 0; f < sampleFields.length; f++) {
+                        if (sampleFields[f].toLowerCase().indexOf(lower) !== -1) return sampleFields[f];
+                    }
+                }
+                return "";
+            }
+
+            var fNo = findField(["No", "No.", "Item_No", "Item_No.", "Number"]) || "No";
+            var fInv = findField(["Inventory", "Qty_on_Hand", "Quantity_on_Hand", "Stock"]);
+            var fSales = findField(["Qty_on_Sales_Order", "Qty._on_Sales_Order", "Qty__on_Sales_Order", "Quantity_on_Sales_Order"]);
+            var fPurch = findField(["Qty_on_Purch_Order", "Qty._on_Purch._Order", "Qty__on_Purch__Order", "Qty_on_Purch__Order", "Quantity_on_Purchase_Order"]);
+
+            console.log("Mapped fields — No:", fNo, "| Inventory:", fInv, "| Sales:", fSales, "| Purch:", fPurch);
+
+            // Build $select with discovered field names (skip empty ones)
+            var selectFields = [fNo];
+            if (fInv) selectFields.push(fInv);
+            if (fSales) selectFields.push(fSales);
+            if (fPurch) selectFields.push(fPurch);
+
             var items = await bcFetchAll(
-                BC_ODATA_URL + "/Company('" + coName + "')/Items?$select=No,Inventory,Qty_on_Sales_Order,Qty_on_Purch_Order&$top=10000",
+                BC_ODATA_URL + "/Company('" + coName + "')/Items?$select=" + selectFields.join(",") + "&$top=10000",
                 "Items"
             );
             var rows = [];
             for (var i = 0; i < items.length; i++) {
                 var it = items[i];
                 rows.push({
-                    "No.":                  it.No,
-                    "Inventory":            it.Inventory || 0,
-                    "Qty. on Sales Order":  it.Qty_on_Sales_Order || 0,
-                    "Qty. on Purch. Order": it.Qty_on_Purch_Order || 0,
+                    "No.":                  it[fNo] || "",
+                    "Inventory":            fInv ? (it[fInv] || 0) : 0,
+                    "Qty. on Sales Order":  fSales ? (it[fSales] || 0) : 0,
+                    "Qty. on Purch. Order": fPurch ? (it[fPurch] || 0) : 0,
                 });
             }
             return {
