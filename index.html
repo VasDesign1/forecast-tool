@@ -679,24 +679,65 @@
         // 1) Item Ledger Entries (via standard API v2.0)
         async function bcFetchLedgerEntries() {
             const compId = await bcGetCompanyId();
+
+            // First fetch 1 entry to discover actual field names
+            updateBCStatus("Discovering ledger entry field names...");
+            var sampleData = await bcFetch(
+                BC_API_URL + "/companies(" + compId + ")/itemLedgerEntries?$top=1"
+            );
+            var sampleFields = (sampleData.value && sampleData.value.length > 0) ? Object.keys(sampleData.value[0]) : [];
+            console.log("Available Ledger Entry fields:", sampleFields);
+            if (sampleData.value && sampleData.value.length > 0) {
+                console.log("Sample ledger entry:", JSON.stringify(sampleData.value[0], null, 2));
+            }
+
+            function findField(candidates) {
+                for (var c = 0; c < candidates.length; c++) {
+                    var lower = candidates[c].toLowerCase();
+                    for (var f = 0; f < sampleFields.length; f++) {
+                        if (sampleFields[f].toLowerCase() === lower) return sampleFields[f];
+                    }
+                }
+                for (var c = 0; c < candidates.length; c++) {
+                    var lower = candidates[c].toLowerCase();
+                    for (var f = 0; f < sampleFields.length; f++) {
+                        if (sampleFields[f].toLowerCase().indexOf(lower) !== -1) return sampleFields[f];
+                    }
+                }
+                return "";
+            }
+
+            var fDate = findField(["postingDate", "posting_date", "Posting_Date"]) || "postingDate";
+            var fItem = findField(["itemNumber", "item_number", "Item_No", "itemNo"]) || "itemNumber";
+            var fQty = findField(["quantity", "Quantity"]) || "quantity";
+            var fDesc = findField(["description", "Description"]) || "description";
+            var fLoc = findField(["locationCode", "location_code", "Location_Code"]) || "locationCode";
+            var fEntry = findField(["entryType", "entry_type", "Entry_Type"]) || "entryType";
+            var fDoc = findField(["documentType", "document_type", "Document_Type"]) || "documentType";
+
+            console.log("Mapped ledger fields — Date:", fDate, "| Item:", fItem, "| Qty:", fQty, "| Desc:", fDesc, "| Loc:", fLoc, "| EntryType:", fEntry, "| DocType:", fDoc);
+
             const entries = await bcFetchAll(
                 BC_API_URL + "/companies(" + compId + ")/itemLedgerEntries?$top=10000",
                 "Item Ledger Entries"
             );
-            // Transform to the format processLedgerWithMapping() expects
+
             var rows = [];
             for (var i = 0; i < entries.length; i++) {
                 var e = entries[i];
                 rows.push({
-                    "Posting Date":  e.postingDate,
-                    "Item No.":      e.itemNumber,
-                    "Quantity":       e.quantity,
-                    "Description":    e.description || "",
-                    "Location Code":  e.locationCode || "",
-                    "Entry Type":     e.entryType || "",
-                    "Document Type":  e.documentType || "",
+                    "Posting Date":  e[fDate],
+                    "Item No.":      e[fItem],
+                    "Quantity":       e[fQty],
+                    "Description":    e[fDesc] || "",
+                    "Location Code":  e[fLoc] || "",
+                    "Entry Type":     e[fEntry] || "",
+                    "Document Type":  e[fDoc] || "",
                 });
             }
+
+            console.log("First 3 transformed ledger rows:", JSON.stringify(rows.slice(0, 3), null, 2));
+
             return {
                 rows: rows,
                 mapping: {
