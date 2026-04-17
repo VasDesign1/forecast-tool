@@ -1379,6 +1379,7 @@
             { id: 'salesQty', label: 'Qty on Sales Order',    required: false, patterns: [['sales','order'], ['sales','qty'], ['so','qty'], ['sales']] },
             { id: 'purchQty', label: 'Qty on Purch. Order',   required: false, patterns: [['purch','order'], ['purchase','order'], ['po','qty'], ['purch']] },
             { id: 'availInv', label: 'Inventory',             required: false, patterns: [['inventory'], ['stock'], ['on','hand'], ['avail']] },
+            { id: 'vendorNo', label: 'Vendor No.',             required: false, patterns: [['vendor','no'], ['vendor'], ['supplier','no'], ['supplier']], exclude: ['name', 'desc'] },
         ];
 
         const VENDOR_COLUMN_ROLES = [
@@ -1902,6 +1903,7 @@
                 const salesCol = mapping.salesQty;
                 const purchCol = mapping.purchQty;
                 const availCol = mapping.availInv;
+                const vendorCol = mapping.vendorNo;
 
                 if (!salesCol && !purchCol) {
                     alert('Please map at least one of: Qty on Sales Order or Qty on Purch. Order');
@@ -1924,6 +1926,25 @@
                         availInv: availInv,
                     };
                     if (salesQty > 0 || purchQty > 0) count++;
+
+                    // Extract vendor mapping from Item List if Vendor No. column is present
+                    if (vendorCol) {
+                        const vendor = String(row[vendorCol] || '').trim();
+                        if (vendor && vendor !== 'nan') {
+                            if (!vendorMapping[item]) {
+                                vendorMapping[item] = [vendor];
+                            } else if (Array.isArray(vendorMapping[item]) && !vendorMapping[item].includes(vendor)) {
+                                vendorMapping[item].push(vendor);
+                            }
+                        }
+                    }
+                }
+
+                // If vendor data was extracted, save and rebuild vendor list
+                if (vendorCol) {
+                    saveVendorMapping();
+                    rebuildVendorList();
+                    updateVendorStatus();
                 }
 
                 document.getElementById('orderStatus').textContent =
