@@ -722,6 +722,13 @@
                 "Item Ledger Entries"
             );
 
+            // BC's API returns enum strings with XML name escapes (e.g. "Assembly_x0020_Consumption" for "Assembly Consumption", "_x0020_" for a blank). Decode so equality checks work.
+            function decodeBcName(s) {
+                return String(s == null ? "" : s).replace(/_x([0-9A-Fa-f]{4})_/g, function(_, hex) {
+                    return String.fromCharCode(parseInt(hex, 16));
+                }).trim();
+            }
+
             var rows = [];
             for (var i = 0; i < entries.length; i++) {
                 var e = entries[i];
@@ -731,8 +738,8 @@
                     "Quantity":       e[fQty],
                     "Description":    e[fDesc] || "",
                     "Location Code":  e[fLoc] || "",
-                    "Entry Type":     e[fEntry] || "",
-                    "Document Type":  e[fDoc] || "",
+                    "Entry Type":     decodeBcName(e[fEntry]),
+                    "Document Type":  decodeBcName(e[fDoc]),
                 });
             }
 
