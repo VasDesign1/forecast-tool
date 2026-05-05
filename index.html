@@ -564,7 +564,7 @@
             clientId:    "0f3136a8-79cd-4335-9790-7ae3fe5800be",
             tenantId:    "68c88731-a731-4307-bb12-28557affd0ca",
             environment: "Production",
-            companyName: "VICAIR Pty Ltd",
+            companyName: "Vic Air Supplies",
         };
         // ============================================================
 
@@ -737,7 +737,7 @@
                     "Item No.":      e[fItem],
                     "Quantity":       e[fQty],
                     "Description":    e[fDesc] || "",
-                    "Location Code":  e[fLoc] || "",
+                    "Location Code":  e[fLoc] || "DEFAULT",
                     "Entry Type":     decodeBcName(e[fEntry]),
                     "Document Type":  decodeBcName(e[fDoc]),
                 });
