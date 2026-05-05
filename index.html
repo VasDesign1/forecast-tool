@@ -926,6 +926,8 @@
                 // These are the EXISTING functions in the tool — no changes needed
                 processLedgerWithMapping(ledger.rows, ledger.mapping);
                 processOrderWithMapping(items.rows, items.mapping);
+                // Wipe cached vendor mapping so BC's current Vendor_No fully replaces any historical/manual entries.
+                vendorMapping = {};
                 processVendorWithMapping(vendors.rows, vendors.mapping);
 
                 // Done
