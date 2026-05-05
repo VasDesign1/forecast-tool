@@ -851,29 +851,6 @@
             var fVName = findVField(["displayName", "name", "Name", "vendorName"]) || "displayName";
             console.log("Vendor fields — No:", fVNo, "| Name:", fVName);
 
-            // Discover item-vendor catalog field names
-            var ivFields = [];
-            var itemVendorCatalogAvailable = true;
-            try {
-                var ivSample = await bcFetch(BC_ODATA_URL + "/Company('" + coName + "')/Item_Vendor_Catalog?$top=1");
-                ivFields = (ivSample.value && ivSample.value.length > 0) ? Object.keys(ivSample.value[0]) : [];
-                console.log("Available Item Vendor Catalog fields:", ivFields);
-                if (ivSample.value && ivSample.value.length > 0) console.log("Sample item-vendor:", JSON.stringify(ivSample.value[0], null, 2));
-            } catch (e) {
-                console.warn("Item_Vendor_Catalog not available via OData, will use vendor list only:", e.message);
-                itemVendorCatalogAvailable = false;
-            }
-
-            function findIVField(candidates) {
-                for (var c = 0; c < candidates.length; c++) {
-                    var lower = candidates[c].toLowerCase();
-                    for (var f = 0; f < ivFields.length; f++) {
-                        if (ivFields[f].toLowerCase() === lower) return ivFields[f];
-                    }
-                }
-                return "";
-            }
-
             // Fetch vendor list
             var vendors = await bcFetchAll(BC_API_URL + "/companies(" + compId + ")/vendors?$top=10000", "Vendors");
             var nameMap = {};
@@ -881,42 +858,28 @@
                 nameMap[vendors[i][fVNo]] = vendors[i][fVName] || "";
             }
 
-            // Fetch item-vendor catalog if available
-            var itemVendors = [];
-            if (itemVendorCatalogAvailable && ivFields.length > 0) {
-                var fIVItem = findIVField(["Item_No", "Item_No.", "ItemNo", "item_no", "Item_Number"]) || "Item_No";
-                var fIVVendor = findIVField(["Vendor_No", "Vendor_No.", "VendorNo", "vendor_no", "Vendor_Number"]) || "Vendor_No";
-                console.log("Item-Vendor fields — Item:", fIVItem, "| Vendor:", fIVVendor);
-
-                var selectFields = [fIVItem, fIVVendor];
-                try {
-                    itemVendors = await bcFetchAll(
-                        BC_ODATA_URL + "/Company('" + coName + "')/Item_Vendor_Catalog?$select=" + selectFields.join(",") + "&$top=10000",
-                        "Item Vendor Catalog"
-                    );
-                } catch (e) {
-                    console.warn("Item Vendor Catalog fetch failed, trying without $select:", e.message);
-                    try {
-                        itemVendors = await bcFetchAll(
-                            BC_ODATA_URL + "/Company('" + coName + "')/Item_Vendor_Catalog?$top=10000",
-                            "Item Vendor Catalog"
-                        );
-                    } catch (e2) {
-                        console.warn("Item Vendor Catalog not accessible:", e2.message);
-                    }
-                }
-
-                var rows = [];
-                for (var j = 0; j < itemVendors.length; j++) {
-                    var iv = itemVendors[j];
+            // Fetch current vendor per item from the Items master (Item.Vendor_No),
+            // not the historical Item Vendor Catalog. One row per item with a current vendor.
+            var rows = [];
+            try {
+                var itemsForVendor = await bcFetchAll(
+                    BC_ODATA_URL + "/Company('" + coName + "')/Items?$select=No,Vendor_No&$top=10000",
+                    "Item Vendors"
+                );
+                for (var j = 0; j < itemsForVendor.length; j++) {
+                    var it = itemsForVendor[j];
+                    var vNo = it.Vendor_No;
+                    if (!vNo) continue;
                     rows.push({
-                        "No.":          iv[fIVItem],
-                        "Vendor No.":   iv[fIVVendor],
-                        "Vendor Name":  nameMap[iv[fIVVendor]] || "",
+                        "No.":          it.No,
+                        "Vendor No.":   vNo,
+                        "Vendor Name":  nameMap[vNo] || "",
                     });
                 }
-                console.log("Item-Vendor catalog: " + rows.length + " mappings found");
+                console.log("Current item-vendor mappings: " + rows.length);
                 return { rows: rows, mapping: { itemNo: "No.", vendorNo: "Vendor No.", vendorName: "Vendor Name" } };
+            } catch (e) {
+                console.warn("Items Vendor_No fetch failed:", e.message);
             }
 
             // Fallback: no item-vendor catalog available, return empty
