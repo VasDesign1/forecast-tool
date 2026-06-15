@@ -1115,6 +1115,9 @@
         // S-series items: assembly consumption should be consolidated with direct sales
         const S_SERIES_ITEMS = new Set(['S4','S5','S6','S8','S10','S12','S14','S16','S18','S20','S22','S24']);
 
+        // Raw materials sold directly AND consumed in assembly; forecast combines both signals
+        const RAW_MATERIAL_ITEMS = new Set(['TDOHE','TDIB4000','TDFE','TDEHE','TDFEAL','TDBE','TDUE','DATD']);
+
         // Vendor 2376 (ICOOL PACIFIC) local vs overseas items
         const ICOOL_LOCAL_ITEMS = new Set(["AEROSTAND075","C12","C12PCR","C20","C34PCR","C38PCR","C78PCR","CB451","CB45118","CB4512","CB4534","CB4538","CB4558","CB4578","CB901","CB90118","CB9012","CB9034","CB9038","CB9058","CB9078","CJ118","CJ78","CL118-9","CL12-9","CL138-9","CL14-9","CL158-9","CL1-9","CL34-9","CL38-9","CL58-9","CL78-9","HD1","HD118","HD12","HD34","HD38","HD58","HD78","MAPGAS","RPC1412FR","RPC1438FR","RPC1458FR","RPC3834FR","RPC3858FR","SOLDER"]);
         const ICOOL_OVERSEAS_ITEMS = new Set(["CT1012","CT1416","CT68","EXGVS6SS","EXVS4SS","EXVS5SS","EXVS6SS","LBRACKET","PC1002M","PC100C","PC100CC","PC100E","PC100FJ","PC100J","PC100RT","PC100WC","PC802M","PC80C","PC80CC","PC80E","PC80FJ","PC80J","PC80WC","RBRACKET","RPC1234","RPC1412","RPC1438","RPC1458","RPC3834","RPC3858","VBRACKET","ZBRACKET","ZZFLEXIDRAIN"]);
@@ -1577,7 +1580,7 @@
                 dataMinDate = null;
                 dataMaxDate = null;
 
-                let salesCount = 0, assemblyRemapCount = 0, assemblySSeriesCount = 0, skippedAssembly = 0;
+                let salesCount = 0, assemblyRemapCount = 0, assemblySSeriesCount = 0, assemblyRawMaterialCount = 0, skippedAssembly = 0;
 
                 for (const row of rows) {
                     const dateVal = excelDateToJS(row[dateCol]);
@@ -1609,6 +1612,11 @@
                             itemNo = itemNo.toUpperCase();
                             accepted = true;
                             assemblySSeriesCount++;
+                        } else if (RAW_MATERIAL_ITEMS.has(itemNo) || RAW_MATERIAL_ITEMS.has(itemNo.toUpperCase())) {
+                            // Raw material item: consolidate with direct sales under same code
+                            itemNo = itemNo.toUpperCase();
+                            accepted = true;
+                            assemblyRawMaterialCount++;
                         } else {
                             // Other assembly consumption — skip
                             skippedAssembly++;
@@ -1654,6 +1662,7 @@
                 console.log('  Sales rows:', salesCount);
                 console.log('  Assembly LBUN/RBUN remapped:', assemblyRemapCount);
                 console.log('  Assembly S-series consolidated:', assemblySSeriesCount);
+                console.log('  Assembly raw materials consolidated:', assemblyRawMaterialCount);
                 console.log('  Assembly skipped (other):', skippedAssembly);
                 console.log('  Total parsed rows:', rawParsedRows.length);
                 console.log('  Entry Type col mapped:', entryTypeCol || '(not mapped)');
@@ -1664,6 +1673,7 @@
                     { label: 'Sales rows', value: salesCount.toLocaleString(), color: '#1a237e' },
                     { label: 'Assembly LBUN/RBUN remapped', value: assemblyRemapCount.toLocaleString(), color: '#e65100' },
                     { label: 'Assembly S-series consolidated', value: assemblySSeriesCount.toLocaleString(), color: '#e65100' },
+                    { label: 'Assembly raw materials consolidated', value: assemblyRawMaterialCount.toLocaleString(), color: '#e65100' },
                     { label: 'Assembly skipped (other items)', value: skippedAssembly.toLocaleString(), color: '#888' },
                     { label: 'Total rows processed', value: rawParsedRows.length.toLocaleString(), color: '#2e7d32' },
                 ]);
@@ -3189,8 +3199,9 @@
             const isAssembledItem = unassembledCodes.length > 0;
             const isUnassembledItem = assembledCode !== null;
             const isSSeriesItem = S_SERIES_ITEMS.has(itemNo);
+            const isRawMaterialItem = RAW_MATERIAL_ITEMS.has(itemNo);
 
-            if (isAssembledItem || isUnassembledItem || isSSeriesItem) {
+            if (isAssembledItem || isUnassembledItem || isSSeriesItem || isRawMaterialItem) {
                 // Get active date range
                 const fromStr2 = document.getElementById('dateFrom').value;
                 const toStr2 = document.getElementById('dateTo').value;
@@ -3271,8 +3282,8 @@
                     html += '<div style="font-size:12px;color:#777;">This is an unassembled component that gets assembled into <strong>' + esc(assembledCode) + '</strong>. Order <strong>' + esc(itemNo) + '</strong> from the vendor to meet assembly demand.</div>';
                 }
 
-                if (isSSeriesItem) {
-                    // S-series item — show breakdown of direct sales vs assembly consumption
+                if (isSSeriesItem || isRawMaterialItem) {
+                    // Item is both sold directly and consumed in assembly — show breakdown
                     let sSalesTotal = 0;
                     let sAssemblyTotal = 0;
 
@@ -3294,7 +3305,7 @@
                     html += '<div style="background:#fff8e1;padding:10px 18px;border-radius:8px;text-align:center;border:1px solid #ffe082;"><div style="font-size:18px;font-weight:700;color:#e65100;">' + fmt(sAssemblyTotal) + '</div><div style="font-size:10px;color:#666;">Assembly Consumption (' + esc(itemNo) + ')</div></div>';
                     html += '<div style="background:#e8f5e9;padding:10px 18px;border-radius:8px;text-align:center;"><div style="font-size:18px;font-weight:700;color:#2e7d32;">' + fmt(grandTotal) + '</div><div style="font-size:10px;color:#666;">Combined Total</div></div>';
                     html += '</div>';
-                    html += '<div style="font-size:12px;color:#777;">This starting collar is both sold directly and consumed in assembly. The forecast reflects combined demand.</div>';
+                    html += '<div style="font-size:12px;color:#777;">' + (isSSeriesItem ? 'This starting collar' : 'This raw material') + ' is both sold directly and consumed in assembly. The forecast reflects combined demand.</div>';
                 }
 
                 html += '</div>';
