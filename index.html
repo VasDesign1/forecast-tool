@@ -1116,7 +1116,10 @@
         const S_SERIES_ITEMS = new Set(['S4','S5','S6','S8','S10','S12','S14','S16','S18','S20','S22','S24']);
 
         // Raw materials sold directly AND consumed in assembly; forecast combines both signals
-        const RAW_MATERIAL_ITEMS = new Set(['TDHE','TDIB4000','TDFE','TDEHE','TDFEAL','TDBE','TDUE','DATD']);
+        const RAW_MATERIAL_ITEMS = new Set([
+            'DATD','TDANGLEBKT','TDBE','TDCA','TDEHE','TDFE','TDFEAL','TDHE','TDHEAL',
+            'TDIB4000','TDIB4000F','TDIF90E','TDIFE','TDRR','TDSD','TDTIGER','TDUE','TDUEAL'
+        ]);
 
         // Vendor 2376 (ICOOL PACIFIC) local vs overseas items
         const ICOOL_LOCAL_ITEMS = new Set(["AEROSTAND075","C12","C12PCR","C20","C34PCR","C38PCR","C78PCR","CB451","CB45118","CB4512","CB4534","CB4538","CB4558","CB4578","CB901","CB90118","CB9012","CB9034","CB9038","CB9058","CB9078","CJ118","CJ78","CL118-9","CL12-9","CL138-9","CL14-9","CL158-9","CL1-9","CL34-9","CL38-9","CL58-9","CL78-9","HD1","HD118","HD12","HD34","HD38","HD58","HD78","MAPGAS","RPC1412FR","RPC1438FR","RPC1458FR","RPC3834FR","RPC3858FR","SOLDER"]);
