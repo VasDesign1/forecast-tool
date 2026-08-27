@@ -1334,7 +1334,7 @@
                 dataMinDate = null;
                 dataMaxDate = null;
 
-                let salesCount = 0, assemblyRemapCount = 0, assemblySSeriesCount = 0, assemblyRawMaterialCount = 0, skippedAssembly = 0;
+                let salesCount = 0, returnsCount = 0, assemblyRemapCount = 0, assemblySSeriesCount = 0, assemblyRawMaterialCount = 0, skippedAssembly = 0;
 
                 for (const row of rows) {
                     const dateVal = excelDateToJS(row[dateCol]);
@@ -1376,10 +1376,15 @@
                             skippedAssembly++;
                         }
                     } else if (entryType === 'sale' || entryType === '') {
-                        // Sale entry — only accept Sales Shipment (or no doc type if column not mapped)
+                        // Sale entry — Sales Shipment consumes stock; Sales Return
+                        // Receipt is returned stock and nets against it (its positive
+                        // qty becomes negative usage via the sign flip below).
                         if (!docType || docType === 'sales shipment') {
                             accepted = true;
                             salesCount++;
+                        } else if (docType === 'sales return receipt') {
+                            accepted = true;
+                            returnsCount++;
                         }
                     }
 
@@ -1414,6 +1419,7 @@
 
                 console.log('Ledger processing summary:');
                 console.log('  Sales rows:', salesCount);
+                console.log('  Sales returns netted:', returnsCount);
                 console.log('  Assembly LBUN/RBUN remapped:', assemblyRemapCount);
                 console.log('  Assembly S-series consolidated:', assemblySSeriesCount);
                 console.log('  Assembly raw materials consolidated:', assemblyRawMaterialCount);
@@ -1425,6 +1431,7 @@
                 // Show persistent import badge
                 showImportBadge('ledger', 'Ledger: ' + rawParsedRows.length.toLocaleString() + ' rows', '', [
                     { label: 'Sales rows', value: salesCount.toLocaleString(), color: '#1a237e' },
+                    { label: 'Sales returns netted', value: returnsCount.toLocaleString(), color: '#c62828' },
                     { label: 'Assembly LBUN/RBUN remapped', value: assemblyRemapCount.toLocaleString(), color: '#e65100' },
                     { label: 'Assembly S-series consolidated', value: assemblySSeriesCount.toLocaleString(), color: '#e65100' },
                     { label: 'Assembly raw materials consolidated', value: assemblyRawMaterialCount.toLocaleString(), color: '#e65100' },
