@@ -2523,6 +2523,17 @@
         }
 
         // ---- Predicted Forecast based on adjusted container quantities ----
+        let pfSortCol = null, pfSortDir = 'desc';
+        function handlePfSort(key) {
+            if (pfSortCol === key) {
+                pfSortDir = pfSortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                pfSortCol = key;
+                // Text columns start ascending, numeric columns descending
+                pfSortDir = (key === 'itemNo' || key === 'description') ? 'asc' : 'desc';
+            }
+            showPredictedForecast();
+        }
         function showPredictedForecast() {
             if (!containerOptimized || containerPlanData.length === 0) {
                 alert('Please click "Optimize Containers" first to adjust quantities.');
@@ -2587,18 +2598,35 @@
             html += '<div style="background:#bbdefb;padding:10px 18px;border-radius:8px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#0d47a1;">' + containerPlanData.length + '</div><div style="font-size:10px;color:#555;">Items</div></div>';
             html += '</div>';
 
+            // Sort (click a header) — text columns alphabetically, the rest numerically
+            if (pfSortCol) {
+                const dir = pfSortDir === 'asc' ? 1 : -1;
+                const isText = pfSortCol === 'itemNo' || pfSortCol === 'description';
+                itemRows.sort((a, b) => {
+                    if (isText) return dir * String(a[pfSortCol]).localeCompare(String(b[pfSortCol]));
+                    return dir * ((a[pfSortCol] || 0) - (b[pfSortCol] || 0));
+                });
+            }
+
             // Detail table
             html += '<div style="overflow-x:auto;max-height:400px;overflow-y:auto;"><table style="width:100%;font-size:12px;border-collapse:collapse;">';
             const thS = 'background:#90caf9;padding:8px 10px;color:#0d47a1;font-weight:600;';
+            const pfCols = [
+                { key: 'itemNo',        label: 'Item',           align: 'left'  },
+                { key: 'description',   label: 'Description',    align: 'left'  },
+                { key: 'monthlyAvg',    label: 'Monthly Avg',    align: 'right' },
+                { key: 'originalQty',   label: 'Original Qty',   align: 'right' },
+                { key: 'adjustedQty',   label: 'Adjusted Qty',   align: 'right' },
+                { key: 'qtyDiff',       label: 'Difference',     align: 'right' },
+                { key: 'pctChange',     label: '% Change',       align: 'right' },
+                { key: 'monthsCovered', label: 'Months Covered', align: 'right' },
+            ];
             html += '<tr>';
-            html += '<th style="' + thS + 'text-align:left;">Item</th>';
-            html += '<th style="' + thS + 'text-align:left;">Description</th>';
-            html += '<th style="' + thS + 'text-align:right;">Monthly Avg</th>';
-            html += '<th style="' + thS + 'text-align:right;">Original Qty</th>';
-            html += '<th style="' + thS + 'text-align:right;">Adjusted Qty</th>';
-            html += '<th style="' + thS + 'text-align:right;">Difference</th>';
-            html += '<th style="' + thS + 'text-align:right;">% Change</th>';
-            html += '<th style="' + thS + 'text-align:right;">Months Covered</th>';
+            for (const c of pfCols) {
+                let cls = 'sortable';
+                if (pfSortCol === c.key) cls += pfSortDir === 'asc' ? ' sorted-asc' : ' sorted-desc';
+                html += '<th class="' + cls + '" style="' + thS + 'text-align:' + c.align + ';" onclick="handlePfSort(\'' + c.key + '\')">' + c.label + '</th>';
+            }
             html += '</tr>';
 
             for (const r of itemRows) {
