@@ -1334,7 +1334,7 @@
                 dataMinDate = null;
                 dataMaxDate = null;
 
-                let salesCount = 0, returnsCount = 0, assemblyRemapCount = 0, assemblySSeriesCount = 0, assemblyRawMaterialCount = 0, skippedAssembly = 0;
+                let salesCount = 0, returnsCount = 0, assemblyRemapCount = 0, assemblySSeriesCount = 0, assemblyRawMaterialCount = 0, assemblyOtherCount = 0;
 
                 for (const row of rows) {
                     const dateVal = excelDateToJS(row[dateCol]);
@@ -1372,8 +1372,12 @@
                             accepted = true;
                             assemblyRawMaterialCount++;
                         } else {
-                            // Other assembly consumption — skip
-                            skippedAssembly++;
+                            // All other assembly consumption counts as consumption
+                            // too, under the component's own item code. Each row hits
+                            // exactly one branch of this chain, so the special groups
+                            // above are never double-counted.
+                            accepted = true;
+                            assemblyOtherCount++;
                         }
                     } else if (entryType === 'sale' || entryType === '') {
                         // Sale entry — Sales Shipment consumes stock; Sales Return
@@ -1423,7 +1427,7 @@
                 console.log('  Assembly LBUN/RBUN remapped:', assemblyRemapCount);
                 console.log('  Assembly S-series consolidated:', assemblySSeriesCount);
                 console.log('  Assembly raw materials consolidated:', assemblyRawMaterialCount);
-                console.log('  Assembly skipped (other):', skippedAssembly);
+                console.log('  Assembly consumption (other items):', assemblyOtherCount);
                 console.log('  Total parsed rows:', rawParsedRows.length);
                 console.log('  Entry Type col mapped:', entryTypeCol || '(not mapped)');
                 console.log('  Doc Type col mapped:', docTypeCol || '(not mapped)');
@@ -1435,7 +1439,7 @@
                     { label: 'Assembly LBUN/RBUN remapped', value: assemblyRemapCount.toLocaleString(), color: '#e65100' },
                     { label: 'Assembly S-series consolidated', value: assemblySSeriesCount.toLocaleString(), color: '#e65100' },
                     { label: 'Assembly raw materials consolidated', value: assemblyRawMaterialCount.toLocaleString(), color: '#e65100' },
-                    { label: 'Assembly skipped (other items)', value: skippedAssembly.toLocaleString(), color: '#888' },
+                    { label: 'Assembly consumption (other items)', value: assemblyOtherCount.toLocaleString(), color: '#6a1b9a' },
                     { label: 'Total rows processed', value: rawParsedRows.length.toLocaleString(), color: '#2e7d32' },
                 ]);
 
