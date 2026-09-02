@@ -2966,13 +2966,29 @@
             const isSSeriesItem = S_SERIES_ITEMS.has(itemNo);
             const isRawMaterialItem = RAW_MATERIAL_ITEMS.has(itemNo);
 
-            if (isAssembledItem || isUnassembledItem || isSSeriesItem || isRawMaterialItem) {
-                // Get active date range
-                const fromStr2 = document.getElementById('dateFrom').value;
-                const toStr2 = document.getElementById('dateTo').value;
-                const fromDate2 = fromStr2 ? new Date(fromStr2 + 'T00:00:00Z') : null;
-                const toDate2 = toStr2 ? new Date(toStr2 + 'T23:59:59Z') : null;
+            // Sales vs assembly split for this item in the active date range.
+            // ANY item with assembly consumption rows gets the breakdown panel,
+            // not just the hard-coded S-series / raw-material lists.
+            const fromStr2 = document.getElementById('dateFrom').value;
+            const toStr2 = document.getElementById('dateTo').value;
+            const fromDate2 = fromStr2 ? new Date(fromStr2 + 'T00:00:00Z') : null;
+            const toDate2 = toStr2 ? new Date(toStr2 + 'T23:59:59Z') : null;
+            let itemSalesTotal = 0, itemAssemblyTotal = 0, hasAssemblyRows = false;
+            for (const r of rawParsedRows) {
+                if (r.itemNo !== itemNo && r.itemNo.toUpperCase() !== itemNo) continue;
+                if (fromDate2 && r.date < fromDate2) continue;
+                if (toDate2 && r.date > toDate2) continue;
+                if (r.source === 'assembly') {
+                    itemAssemblyTotal += r.usage;
+                    hasAssemblyRows = true;
+                } else {
+                    itemSalesTotal += r.usage;
+                }
+            }
+            itemSalesTotal = Math.max(0, itemSalesTotal);
+            itemAssemblyTotal = Math.max(0, itemAssemblyTotal);
 
+            if (isAssembledItem || isUnassembledItem || hasAssemblyRows) {
                 html += '<div style="background:#fff3e0;border-radius:10px;padding:15px 20px;margin-bottom:20px;border:1px solid #ffe0b2;">';
                 html += '<h3 style="font-size:14px;color:#e65100;margin-bottom:10px;">Assembly Consolidation Breakdown</h3>';
 
@@ -3047,30 +3063,17 @@
                     html += '<div style="font-size:12px;color:#777;">This is an unassembled component that gets assembled into <strong>' + esc(assembledCode) + '</strong>. Order <strong>' + esc(itemNo) + '</strong> from the vendor to meet assembly demand.</div>';
                 }
 
-                if (isSSeriesItem || isRawMaterialItem) {
-                    // Item is both sold directly and consumed in assembly — show breakdown
-                    let sSalesTotal = 0;
-                    let sAssemblyTotal = 0;
-
-                    for (const r of rawParsedRows) {
-                        if (r.itemNo !== itemNo && r.itemNo.toUpperCase() !== itemNo) continue;
-                        if (fromDate2 && r.date < fromDate2) continue;
-                        if (toDate2 && r.date > toDate2) continue;
-                        if (r.source === 'assembly') {
-                            sAssemblyTotal += r.usage;
-                        } else {
-                            sSalesTotal += r.usage;
-                        }
-                    }
-                    sSalesTotal = Math.max(0, sSalesTotal);
-                    sAssemblyTotal = Math.max(0, sAssemblyTotal);
-
+                if (!isAssembledItem && !isUnassembledItem && hasAssemblyRows) {
+                    // Item consumed in assembly (and possibly also sold directly) — show breakdown
                     html += '<div style="display:flex;gap:15px;flex-wrap:wrap;margin-bottom:10px;">';
-                    html += '<div style="background:#e8eaf6;padding:10px 18px;border-radius:8px;text-align:center;"><div style="font-size:18px;font-weight:700;color:#1a237e;">' + fmt(sSalesTotal) + '</div><div style="font-size:10px;color:#666;">Direct Sales (' + esc(itemNo) + ')</div></div>';
-                    html += '<div style="background:#fff8e1;padding:10px 18px;border-radius:8px;text-align:center;border:1px solid #ffe082;"><div style="font-size:18px;font-weight:700;color:#e65100;">' + fmt(sAssemblyTotal) + '</div><div style="font-size:10px;color:#666;">Assembly Consumption (' + esc(itemNo) + ')</div></div>';
+                    html += '<div style="background:#e8eaf6;padding:10px 18px;border-radius:8px;text-align:center;"><div style="font-size:18px;font-weight:700;color:#1a237e;">' + fmt(itemSalesTotal) + '</div><div style="font-size:10px;color:#666;">Direct Sales (' + esc(itemNo) + ')</div></div>';
+                    html += '<div style="background:#fff8e1;padding:10px 18px;border-radius:8px;text-align:center;border:1px solid #ffe082;"><div style="font-size:18px;font-weight:700;color:#e65100;">' + fmt(itemAssemblyTotal) + '</div><div style="font-size:10px;color:#666;">Assembly Consumption (' + esc(itemNo) + ')</div></div>';
                     html += '<div style="background:#e8f5e9;padding:10px 18px;border-radius:8px;text-align:center;"><div style="font-size:18px;font-weight:700;color:#2e7d32;">' + fmt(grandTotal) + '</div><div style="font-size:10px;color:#666;">Combined Total</div></div>';
                     html += '</div>';
-                    html += '<div style="font-size:12px;color:#777;">' + (isSSeriesItem ? 'This starting collar' : 'This raw material') + ' is both sold directly and consumed in assembly. The forecast reflects combined demand.</div>';
+                    const itemLabel = isSSeriesItem ? 'This starting collar' : (isRawMaterialItem ? 'This raw material' : 'This item');
+                    html += '<div style="font-size:12px;color:#777;">' + itemLabel + (itemSalesTotal > 0
+                        ? ' is both sold directly and consumed in assembly. The forecast reflects combined demand.'
+                        : ' is consumed in assembly. The forecast reflects assembly demand.') + '</div>';
                 }
 
                 html += '</div>';
