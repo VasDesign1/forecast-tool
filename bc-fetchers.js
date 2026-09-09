@@ -208,13 +208,17 @@ async function bcFetchItems() {
     var fInv = findField(["Inventory", "Qty_on_Hand", "Quantity_on_Hand", "Stock"]);
     var fSales = findField(["Qty_on_Sales_Order", "Qty._on_Sales_Order", "Qty__on_Sales_Order", "Quantity_on_Sales_Order"]);
     var fPurch = findField(["Qty_on_Purch_Order", "Qty._on_Purch._Order", "Qty__on_Purch__Order", "Qty_on_Purch__Order", "Quantity_on_Purchase_Order"]);
+    // Item card name — the ledger's Description field is blank on this tenant,
+    // so this is the only source of names for post-NAV items.
+    var fDesc = findField(["Description"]);
 
-    console.log("Mapped fields — No:", fNo, "| Inventory:", fInv, "| Sales:", fSales, "| Purch:", fPurch);
+    console.log("Mapped fields — No:", fNo, "| Inventory:", fInv, "| Sales:", fSales, "| Purch:", fPurch, "| Desc:", fDesc);
 
     var selectFields = [fNo];
     if (fInv) selectFields.push(fInv);
     if (fSales) selectFields.push(fSales);
     if (fPurch) selectFields.push(fPurch);
+    if (fDesc) selectFields.push(fDesc);
 
     var items = await bcFetchAll(
         BC_ODATA_URL + "/Company('" + coName + "')/Items?$select=" + selectFields.join(","),
@@ -228,6 +232,7 @@ async function bcFetchItems() {
             "Inventory":            fInv ? (it[fInv] || 0) : 0,
             "Qty. on Sales Order":  fSales ? (it[fSales] || 0) : 0,
             "Qty. on Purch. Order": fPurch ? (it[fPurch] || 0) : 0,
+            "Description":          fDesc ? (it[fDesc] || "") : "",
         });
     }
     return {
@@ -237,6 +242,7 @@ async function bcFetchItems() {
             salesQty: "Qty. on Sales Order",
             purchQty: "Qty. on Purch. Order",
             availInv: "Inventory",
+            desc: "Description",
         }
     };
 }

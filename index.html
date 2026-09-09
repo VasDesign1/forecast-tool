@@ -1109,6 +1109,7 @@
             { id: 'purchQty', label: 'Qty on Purch. Order',   required: false, patterns: [['purch','order'], ['purchase','order'], ['po','qty'], ['purch']] },
             { id: 'availInv', label: 'Inventory',             required: false, patterns: [['inventory'], ['stock'], ['on','hand'], ['avail']] },
             { id: 'vendorNo', label: 'Vendor No.',             required: false, patterns: [['vendor','no'], ['vendor'], ['supplier','no'], ['supplier']], exclude: ['name', 'desc'] },
+            { id: 'desc',     label: 'Description',            required: false, patterns: [['description'], ['desc']], exclude: ['vendor', 'search'] },
         ];
 
         const VENDOR_COLUMN_ROLES = [
@@ -1543,7 +1544,7 @@
 
                 allData.push({
                     item_no: itemNo,
-                    description: info.description,
+                    description: info.description || ((orderData[itemNo] && orderData[itemNo].description) || ''),
                     total_usage_12m: Math.round(totalUsage * 100) / 100,
                     monthly_avg: Math.round(monthlyAvg * 100) / 100,
                     months_active: monthsActive,
@@ -1651,6 +1652,7 @@
                 const purchCol = mapping.purchQty;
                 const availCol = mapping.availInv;
                 const vendorCol = mapping.vendorNo;
+                const orderDescCol = mapping.desc;
 
                 if (!salesCol && !purchCol) {
                     alert('Please map at least one of: Qty on Sales Order or Qty on Purch. Order');
@@ -1671,6 +1673,7 @@
                         salesQty: salesQty,
                         purchQty: purchQty,
                         availInv: availInv,
+                        description: orderDescCol ? String(row[orderDescCol] || '').trim() : '',
                     };
                     if (salesQty > 0 || purchQty > 0) count++;
 
@@ -1696,6 +1699,18 @@
 
                 document.getElementById('orderStatus').textContent =
                     Object.keys(orderData).length + ' items loaded, ' + count + ' with active orders';
+
+                // Backfill missing descriptions from the item card — Wiise
+                // ledger rows carry none, so post-NAV items are blank otherwise.
+                let descFilled = 0;
+                for (const d of allData) {
+                    const od = orderData[d.item_no];
+                    if (!d.description && od && od.description) {
+                        d.description = od.description;
+                        descFilled++;
+                    }
+                }
+                if (descFilled > 0) console.log('Descriptions backfilled from item list:', descFilled);
 
                 if (allData.length > 0) {
                     currentPage = 1;
