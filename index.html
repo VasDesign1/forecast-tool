@@ -303,9 +303,36 @@
         .import-detail-box .detail-row:last-child { border-bottom: none; }
         .import-detail-box .detail-label { color: #555; }
         .import-detail-box .detail-value { font-weight: 700; color: #1a237e; }
+
+        /* ---------- SIGN-IN OVERLAY (same pattern as the sales tool) ---------- */
+        .signin-overlay {
+            position: fixed; inset: 0;
+            background: linear-gradient(135deg, rgba(26,35,126,0.96), rgba(57,73,171,0.96));
+            display: flex; align-items: center; justify-content: center; z-index: 9999;
+        }
+        .signin-card {
+            background: white; border-radius: 18px; padding: 44px;
+            text-align: center; box-shadow: 0 12px 40px rgba(0,0,0,0.35); max-width: 440px;
+        }
+        .signin-card h2 { color: #1a237e; margin-bottom: 10px; font-size: 24px; }
+        .signin-card p { color: #666; margin-bottom: 26px; font-size: 14px; }
+        .signin-card .big-btn {
+            background: linear-gradient(135deg, #3f51b5, #5c6bc0); color: white;
+            padding: 13px 32px; border: none; border-radius: 10px;
+            font-size: 15px; font-weight: 700; cursor: pointer;
+            box-shadow: 0 4px 14px rgba(63,81,181,0.35);
+        }
     </style>
 </head>
 <body>
+    <div class="signin-overlay" id="signinOverlay">
+        <div class="signin-card">
+            <h2>Item Demand Forecast</h2>
+            <p>Sign in with your VicAir Microsoft account to use the forecast tool.</p>
+            <button class="big-btn" id="signInBtn" onclick="handleSignIn()">Sign in with Microsoft</button>
+        </div>
+    </div>
+
     <div class="header">
         <div>
             <h1>Item Demand Forecast Tool</h1>
@@ -625,6 +652,25 @@
         // Called by bc-fetchers.js on a 401 so the next bcGetToken() refreshes.
         function bcClearToken() { bcAccessToken = null; }
 
+        // ---- Sign-in gate (same pattern as the sales tool) ----
+        // The page opens behind a full-screen overlay; the main UI appears
+        // only after a successful Microsoft sign-in.
+        async function handleSignIn() {
+            var btn = document.getElementById("signInBtn");
+            btn.disabled = true;
+            btn.textContent = "Signing in...";
+            try {
+                await bcGetToken();
+                document.getElementById("signinOverlay").style.display = "none";
+                updateBCStatus("Signed in as " + bcUserName);
+            } catch (err) {
+                alert("Sign-in failed: " + (err.message || err));
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "Sign in with Microsoft";
+            }
+        }
+
         // ---- One-Click Connect & Load All Data ----
         async function connectToWiise() {
             var btn = document.getElementById("bcConnectBtn");
@@ -728,6 +774,9 @@
             refreshBtn.style.display = "none";
             updateBCStatus("Disconnected");
             showBCProgressBar(false);
+            // Back to the sign-in gate
+            var ov = document.getElementById("signinOverlay");
+            if (ov) ov.style.display = "flex";
         }
 
         // ---- UI Helpers for BC Panel ----
