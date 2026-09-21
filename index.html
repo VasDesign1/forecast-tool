@@ -649,6 +649,48 @@
             return result.accessToken;
         }
 
+        // Microsoft Graph token for reading the data files from SharePoint.
+        // Same MSAL account as Business Central; Graph is a separate resource
+        // so it is a separate (silently cached) token. Files.Read.All is
+        // admin-consented tenant-wide, so no extra prompt for signed-in users.
+        async function graphGetToken() {
+            initMsal();
+            const accounts = bcMsalInstance.getAllAccounts();
+            if (accounts.length > 0) {
+                try {
+                    const r = await bcMsalInstance.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: accounts[0] });
+                    return r.accessToken;
+                } catch (e) { /* fall through to interactive */ }
+            }
+            const r = await bcMsalInstance.acquireTokenPopup({ scopes: GRAPH_SCOPES });
+            return r.accessToken;
+        }
+        const GRAPH_API = "https://graph.microsoft.com/v1.0";
+        function spEncPath(p) { return p.split("/").filter(Boolean).map(encodeURIComponent).join("/"); }
+        async function spDriveId(token) {
+            const cached = sessionStorage.getItem("spDriveId:" + SP_CONFIG.host);
+            if (cached) return cached;
+            const h = { Authorization: "Bearer " + token };
+            const site = await fetch(GRAPH_API + "/sites/" + SP_CONFIG.host + ":/?$select=id", { headers: h });
+            if (!site.ok) throw new Error("SharePoint site lookup failed (HTTP " + site.status + ")");
+            const drive = await fetch(GRAPH_API + "/sites/" + (await site.json()).id + "/drive?$select=id", { headers: h });
+            if (!drive.ok) throw new Error("SharePoint library lookup failed (HTTP " + drive.status + ")");
+            const id = (await drive.json()).id;
+            sessionStorage.setItem("spDriveId:" + SP_CONFIG.host, id);
+            return id;
+        }
+        // Fetch a file from the tool's SharePoint folder as the signed-in
+        // user. Graph answers /content with a 302 to a short-lived
+        // pre-authenticated URL; the browser follows it.
+        async function spFetch(name) {
+            const token = await graphGetToken();
+            const driveId = await spDriveId(token);
+            const url = GRAPH_API + "/drives/" + driveId + "/root:/" + spEncPath(SP_CONFIG.folder + "/" + name) + ":/content";
+            const resp = await fetch(url, { headers: { Authorization: "Bearer " + token }, cache: "no-store" });
+            if (resp.status === 403) throw new Error("your account has no access to the data folder on SharePoint");
+            return resp;
+        }
+
         // Called by bc-fetchers.js on a 401 so the next bcGetToken() refreshes.
         function bcClearToken() { bcAccessToken = null; }
 
@@ -3859,18 +3901,19 @@
 
         // ============================================================
         // OLD NAV DATA (pre 01/05/2026) + FAST LOOKUP SNAPSHOTS
-        // NAV: one-off export of Item Ledger Entries baked into the repo as
-        // nav-data.bin (gzip + AES-256-GCM, same layout as the snapshots).
+        // NAV: one-off export of Item Ledger Entries, stored as nav-data.bin
+        // (gzip + AES-256-GCM, same layout as the snapshots).
         // Fast lookup: encrypted snapshots built by scripts/snapshot.js at
-        // 7:00 / 12:00 / 4:30 Melbourne, published to the snapshots branch.
-        // Both unlock with the same passphrase, asked once per device.
+        // 7:00 / 12:00 / 4:30 Melbourne, under snapshots/.
+        // Both live in the Vic Air SharePoint (SP_CONFIG in bc-fetchers.js),
+        // are fetched through Microsoft Graph with the signed-in user's token,
+        // and unlock with the same passphrase, asked once per device.
         // ============================================================
         const CANON_LEDGER_MAPPING = {
             date: "Posting Date", itemNo: "Item No.", qty: "Quantity", desc: "Description",
             loc: "Location Code", entryType: "Entry Type", docType: "Document Type",
         };
-        const NAV_DATA_URL = "nav-data.bin";
-        const SNAPSHOT_BASE = "https://raw.githubusercontent.com/VasDesign1/forecast-tool/snapshots/";
+        const NAV_DATA_FILE = "nav-data.bin";
         const SNAPSHOT_SLOTS = [
             { slot: "0700", label: "7:00 AM" },
             { slot: "1200", label: "12:00 PM" },
@@ -3907,7 +3950,7 @@
             const bytes = new Uint8Array(buf);
             const salt = bytes.slice(0, 16), iv = bytes.slice(16, 28), ct = bytes.slice(28);
             const keyMat = await crypto.subtle.importKey("raw", new TextEncoder().encode(passphrase), "PBKDF2", false, ["deriveKey"]);
-            const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: salt, iterations: 150000, hash: "SHA-256" },
+            const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: salt, iterations: 600000, hash: "SHA-256" },   // keep in sync with scripts/snapshot.js
                 keyMat, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
             const gz = await crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, key, ct);
             const stream = new Blob([gz]).stream().pipeThrough(new DecompressionStream("gzip"));
@@ -3915,8 +3958,8 @@
         }
         // Returns the decrypted payload, or null if the user cancelled the
         // passphrase prompt. Throws on download/decrypt failure.
-        async function fetchAndDecrypt(url, label) {
-            const resp = await fetch(url, { cache: "no-store" });
+        async function fetchAndDecrypt(name, label) {
+            const resp = await spFetch(name);
             if (!resp.ok) throw new Error(label + " download failed (HTTP " + resp.status + ")");
             const buf = await resp.arrayBuffer();
             for (var attempt = 0; attempt < 3; attempt++) {
@@ -3960,7 +4003,7 @@
         async function ensureNavIfChecked() {
             if (!includeNavChecked() || navLedgerCache) return;
             updateBCStatus("Downloading old NAV data...");
-            var payload = await fetchAndDecrypt(NAV_DATA_URL, "NAV data");
+            var payload = await fetchAndDecrypt(NAV_DATA_FILE, "NAV data");
             if (!payload) {   // user cancelled the passphrase prompt
                 var cb = document.getElementById("navDataToggle");
                 if (cb) cb.checked = false;
@@ -4008,9 +4051,15 @@
             var body = document.getElementById("fastLookupMenuBody");
             body.innerHTML = '<div style="padding:10px 14px;opacity:0.6;">Checking snapshots…</div>';
             var today = melbourneTodayISO();
+            // Sign-in / access problems surface once, not as three "no snapshot yet" rows.
+            try { await spDriveId(await graphGetToken()); }
+            catch (e) {
+                body.innerHTML = '<div style="padding:10px 14px;color:#c62828;">Cannot reach the data folder: ' + esc(e.message || String(e)) + '</div>';
+                return;
+            }
             var rows = await Promise.all(SNAPSHOT_SLOTS.map(async function(s) {
                 try {
-                    var r = await fetch(SNAPSHOT_BASE + s.slot + ".meta.json", { cache: "no-store" });
+                    var r = await spFetch("snapshots/" + s.slot + ".meta.json");
                     return { slot: s.slot, label: s.label, meta: r.ok ? await r.json() : null };
                 } catch (e) { return { slot: s.slot, label: s.label, meta: null }; }
             }));
@@ -4042,7 +4091,7 @@
             try {
                 updateBCProgress("Fast lookup", "downloading snapshot…");
                 updateBCProgressPercent(20);
-                var payload = await fetchAndDecrypt(SNAPSHOT_BASE + slot + ".bin", "snapshot");
+                var payload = await fetchAndDecrypt("snapshots/" + slot + ".bin", "snapshot");
                 if (!payload) return;   // user cancelled the passphrase prompt
                 updateBCProgress("Fast lookup", "rendering…");
                 updateBCProgressPercent(80);

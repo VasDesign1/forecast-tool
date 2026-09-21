@@ -22,6 +22,18 @@ const BC_API_BASE = "https://api.businesscentral.dynamics.com/v2.0/" + BC_TENANT
 const BC_API_URL = BC_API_BASE + "/api/v2.0";
 const BC_ODATA_URL = BC_API_BASE + "/ODataV4";
 
+// SharePoint home of the encrypted data files (Fast-lookup snapshots under
+// snapshots/, NAV history as nav-data.bin). Written by the snapshot robot
+// (scripts/sp-upload.js, delegated refresh token) and read by the browser
+// through Microsoft Graph with the signed-in user's token — Files.Read.All
+// on the "VicAir Forecast Tool" app registration. Knowing the path grants
+// nothing: Graph enforces the folder's SharePoint ACL.
+const SP_CONFIG = {
+    host:   "vicairptyltd.sharepoint.com",
+    folder: "Vic Air Shared Docs Folder/03.0 Corporate/3.05 IT and Communications/bc-tools/forecast-tool",
+};
+const GRAPH_SCOPES = ["https://graph.microsoft.com/Files.Read.All"];
+
 // Wiise went live 2026-04-30; everything before this date comes from the
 // baked-in NAV export (nav-data.bin), everything from it onward from Wiise.
 const WIISE_LEDGER_FROM = "2026-05-01";
@@ -308,7 +320,7 @@ async function bcFetchVendors() {
 // Node (snapshot robot) — browsers ignore this block.
 if (typeof module !== "undefined" && module.exports) {
     module.exports = {
-        BC_CONFIG, BC_TENANT_DOMAIN, BC_API_BASE, BC_API_URL, BC_ODATA_URL,
+        BC_CONFIG, BC_TENANT_DOMAIN, BC_API_BASE, BC_API_URL, BC_ODATA_URL, SP_CONFIG, GRAPH_SCOPES,
         WIISE_LEDGER_FROM,
         bcFetch, bcFetchAll, bcGetCompanyId, bcResetCompanyId,
         bcFetchLedgerEntries, bcFetchItems, bcFetchVendors,
