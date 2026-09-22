@@ -263,6 +263,8 @@
         .modal-overlay.active { display: flex; }
 
         /* Toast notification system (BUG 1) */
+        /* Order Planner sits above everything, including the import badges */
+        #plannerModal { z-index: 10500; }
         .import-badges {
             position: fixed; top: 20px; right: 20px; z-index: 9999;
             display: flex; flex-direction: row; gap: 8px;
@@ -576,10 +578,13 @@
 
     <!-- Order Planner Modal -->
     <div class="modal-overlay" id="plannerModal" onmousedown="this._mouseDownTarget=event.target" onmouseup="if(event.target===this&&this._mouseDownTarget===this)closePlanner()">
-        <div style="background:white;border-radius:12px;padding:30px;max-width:1150px;width:95%;max-height:88vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+        <div id="plannerCard" style="background:white;border-radius:12px;padding:30px;max-width:1150px;width:95%;max-height:88vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,0.3);">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
                 <h2 style="color:#1a237e;font-size:18px;">Order Planner</h2>
-                <span style="cursor:pointer;font-size:22px;color:#999;" onclick="closePlanner()">&times;</span>
+                <span style="display:flex;gap:14px;align-items:center;">
+                    <button type="button" id="plannerMaxBtn" onclick="togglePlannerMax()" style="background:white;border:1px solid #ccc;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;color:#444;">&#x26F6; Full screen</button>
+                    <span style="cursor:pointer;font-size:22px;color:#999;" onclick="closePlanner()">&times;</span>
+                </span>
             </div>
             <div style="font-size:12px;color:#666;margin-bottom:14px;">How much to order to cover forecast demand — after subtracting stock on hand, incoming purchase orders and committed sales orders. Quantities are rounded up.</div>
             <div id="plannerControls"></div>
@@ -3684,7 +3689,9 @@
         // − inventory − on purchase order (floored at 0). True calendar
         // weeks: 3M = 13, 6M = 26, 12M = 52.
         // ============================================================
-        const plannerState = { period: 'weekly', group: 'vendor', months: 6, method: 'standard' };
+        const plannerState = { period: 'weekly', group: 'vendor', months: 6, method: 'standard', search: '', maximized: false };
+        const plannerExpanded = new Set();   // vendor keys whose section is open
+        let plannerSearchTimer = null;
         const PLANNER_METHODS = [
             { key: 'standard', label: 'Standard' },
             { key: 'wma', label: 'WMA' },
@@ -3692,10 +3699,13 @@
             { key: 'holt', label: 'Exp. Smoothing' },
             { key: 'seasonal', label: 'Seasonal' },
         ];
+        const PLANNER_CARD_BASE = 'background:white;border-radius:12px;padding:30px;max-width:1150px;width:95%;max-height:88vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,0.3);';
+        const PLANNER_CARD_MAX = 'background:white;border-radius:0;padding:30px;max-width:100vw;width:100vw;height:100vh;max-height:100vh;overflow-y:auto;';
 
         function openOrderPlanner() {
             if (allData.length === 0) { alert('Load data first.'); return; }
             document.getElementById('plannerModal').classList.add('active');
+            applyPlannerSize();
             renderPlanner();
         }
         function closePlanner() {
@@ -3704,6 +3714,34 @@
         function setPlannerOpt(key, value) {
             plannerState[key] = key === 'months' ? parseInt(value) : value;
             renderPlanner();
+        }
+        function togglePlannerMax() {
+            plannerState.maximized = !plannerState.maximized;
+            applyPlannerSize();
+        }
+        function applyPlannerSize() {
+            const card = document.getElementById('plannerCard');
+            if (card) card.setAttribute('style', plannerState.maximized ? PLANNER_CARD_MAX : PLANNER_CARD_BASE);
+            const btn = document.getElementById('plannerMaxBtn');
+            if (btn) btn.innerHTML = plannerState.maximized ? '&#x1F5D7; Restore' : '&#x26F6; Full screen';
+        }
+        // Search re-renders only the content, so the input keeps focus while typing.
+        function plannerSearchInput(v) {
+            clearTimeout(plannerSearchTimer);
+            plannerSearchTimer = setTimeout(function() {
+                plannerState.search = v.trim().toLowerCase();
+                renderPlannerContent();
+            }, 150);
+        }
+        function togglePlannerVendor(encKey) {
+            const k = decodeURIComponent(encKey);
+            if (plannerExpanded.has(k)) plannerExpanded.delete(k); else plannerExpanded.add(k);
+            renderPlannerContent();
+        }
+        function plannerExpandAll(open) {
+            plannerExpanded.clear();
+            if (open) for (const r of computePlannerRows()) plannerExpanded.add(r.vendorNo || '__none__');
+            renderPlannerContent();
         }
 
         function plannerWeeks(months) { return Math.round(months * 52 / 12); }  // 13 / 26 / 52
@@ -3745,14 +3783,14 @@
         }
 
         function renderPlanner() {
+            renderPlannerControls();
+            renderPlannerContent();
+        }
+
+        function renderPlannerControls() {
             const s = plannerState;
             const months = s.months;
-            const weeks = plannerWeeks(months);
-            const perLabel = s.period === 'weekly' ? 'Order / Week' : 'Order / Month';
-            const perKey = s.period === 'weekly' ? 'perWeek' : 'perMonth';
-
-            // Controls
-            let ch = '<div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin-bottom:14px;font-size:12px;">';
+            let ch = '<div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin-bottom:10px;font-size:12px;">';
             ch += '<span><strong style="color:#555;">Period:</strong> '
                 + plannerChip(s.period === 'weekly', "setPlannerOpt('period','weekly')", 'Weekly') + ' '
                 + plannerChip(s.period === 'monthly', "setPlannerOpt('period','monthly')", 'Monthly') + '</span>';
@@ -3767,9 +3805,36 @@
                 + PLANNER_METHODS.map(m => plannerChip(s.method === m.key, "setPlannerOpt('method','" + m.key + "')", m.label)).join(' ') + '</span>';
             ch += '<button type="button" class="btn btn-outline" style="padding:6px 12px;font-size:12px;" onclick="plannerExportCSV()">Export CSV</button>';
             ch += '</div>';
+            ch += '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px;font-size:12px;">';
+            ch += '<input type="text" id="plannerSearch" placeholder="Search vendor or item..." value="' + escAttr(s.search) + '" oninput="plannerSearchInput(this.value)"'
+                + ' style="flex:1;min-width:220px;max-width:420px;padding:7px 12px;border:1px solid #ccc;border-radius:6px;font-size:12px;">';
+            if (s.group === 'vendor') {
+                ch += '<button type="button" style="background:white;color:#444;border:1px solid #ccc;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;" onclick="plannerExpandAll(true)">Expand all</button>';
+                ch += '<button type="button" style="background:white;color:#444;border:1px solid #ccc;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;" onclick="plannerExpandAll(false)">Collapse all</button>';
+            }
+            ch += '</div>';
             document.getElementById('plannerControls').innerHTML = ch;
+        }
 
-            const rows = computePlannerRows();
+        function renderPlannerContent() {
+            const s = plannerState;
+            const months = s.months;
+            const weeks = plannerWeeks(months);
+            const perLabel = s.period === 'weekly' ? 'Order / Week' : 'Order / Month';
+            const perKey = s.period === 'weekly' ? 'perWeek' : 'perMonth';
+            const q = s.search;
+
+            let rows = computePlannerRows();
+            // Search: a vendor-name hit keeps the vendor's whole list; otherwise
+            // match on item number / description.
+            if (q) {
+                rows = rows.filter(r => {
+                    const vend = r.vendorNo ? vendorDisplayLabel(r.vendorNo).toLowerCase() : 'no vendor assigned';
+                    return vend.indexOf(q) !== -1
+                        || r.itemNo.toLowerCase().indexOf(q) !== -1
+                        || r.description.toLowerCase().indexOf(q) !== -1;
+                });
+            }
             const totalNet = rows.reduce((a, r) => a + r.net, 0);
             const totalPer = rows.reduce((a, r) => a + r[perKey], 0);
 
@@ -3803,36 +3868,44 @@
             }
 
             if (rows.length === 0) {
-                html += '<div style="padding:30px;text-align:center;color:#888;">Nothing to order — current stock and incoming purchase orders cover the ' + months + '-month forecast for every item.</div>';
+                html += '<div style="padding:30px;text-align:center;color:#888;">' + (q
+                    ? 'No vendors or items match "' + esc(q) + '".'
+                    : 'Nothing to order — current stock and incoming purchase orders cover the ' + months + '-month forecast for every item.') + '</div>';
             } else if (s.group === 'item') {
                 rows.sort((a, b) => b[perKey] - a[perKey]);
                 html += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">' + tableHead(true);
                 for (const r of rows) html += tableRow(r, true);
                 html += '</table></div>';
             } else {
-                // Group by vendor
+                // Group by vendor — collapsed by default, click the bar to
+                // expand. "No vendor assigned" always sorts last. A search
+                // forces matching sections open.
                 const byVendor = {};
                 for (const r of rows) {
                     const v = r.vendorNo || '__none__';
                     (byVendor[v] = byVendor[v] || []).push(r);
                 }
-                const vendorKeys = Object.keys(byVendor).sort((a, b) => {
-                    const sub = k => byVendor[k].reduce((x, r) => x + r[perKey], 0);
-                    return sub(b) - sub(a);
-                });
+                const sub = k => byVendor[k].reduce((x, r) => x + r[perKey], 0);
+                const vendorKeys = Object.keys(byVendor).sort((a, b) =>
+                    ((a === '__none__') - (b === '__none__')) || (sub(b) - sub(a)));
                 for (const v of vendorKeys) {
                     const vRows = byVendor[v];
                     vRows.sort((a, b) => b[perKey] - a[perKey]);
                     const subPer = vRows.reduce((x, r) => x + r[perKey], 0);
                     const subNet = vRows.reduce((x, r) => x + r.net, 0);
                     const label = v === '__none__' ? 'No vendor assigned' : vendorDisplayLabel(v);
-                    html += '<div style="margin-bottom:18px;">';
-                    html += '<div style="background:#1a237e;color:white;padding:8px 12px;border-radius:8px 8px 0 0;font-size:13px;font-weight:600;display:flex;justify-content:space-between;">'
-                          + '<span>' + esc(label) + ' <span style="opacity:0.7;font-weight:400;">(' + vRows.length + ' items)</span></span>'
+                    const isOpen = q ? true : plannerExpanded.has(v);
+                    const encKey = encodeURIComponent(v).replace(/'/g, '%27');
+                    html += '<div style="margin-bottom:' + (isOpen ? '18px' : '8px') + ';">';
+                    html += '<div onclick="togglePlannerVendor(\'' + encKey + '\')" style="cursor:pointer;user-select:none;background:#1a237e;color:white;padding:8px 12px;border-radius:' + (isOpen ? '8px 8px 0 0' : '8px') + ';font-size:13px;font-weight:600;display:flex;justify-content:space-between;">'
+                          + '<span>' + (isOpen ? '&#x25BE;' : '&#x25B8;') + ' ' + esc(label) + ' <span style="opacity:0.7;font-weight:400;">(' + vRows.length + ' items)</span></span>'
                           + '<span>' + Math.round(subPer).toLocaleString() + ' units ' + (s.period === 'weekly' ? '/ week' : '/ month') + ' · ' + Math.round(subNet).toLocaleString() + ' net over ' + months + 'M</span></div>';
-                    html += '<div style="overflow-x:auto;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 8px 8px;"><table style="width:100%;border-collapse:collapse;">' + tableHead(false);
-                    for (const r of vRows) html += tableRow(r, false);
-                    html += '</table></div></div>';
+                    if (isOpen) {
+                        html += '<div style="overflow-x:auto;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 8px 8px;"><table style="width:100%;border-collapse:collapse;">' + tableHead(false);
+                        for (const r of vRows) html += tableRow(r, false);
+                        html += '</table></div>';
+                    }
+                    html += '</div>';
                 }
             }
             document.getElementById('plannerContent').innerHTML = html;
@@ -3840,7 +3913,16 @@
 
         function plannerExportCSV() {
             const s = plannerState;
-            const rows = computePlannerRows();
+            let rows = computePlannerRows();
+            const q = s.search;
+            if (q) {
+                rows = rows.filter(r => {
+                    const vend = r.vendorNo ? vendorDisplayLabel(r.vendorNo).toLowerCase() : 'no vendor assigned';
+                    return vend.indexOf(q) !== -1
+                        || r.itemNo.toLowerCase().indexOf(q) !== -1
+                        || r.description.toLowerCase().indexOf(q) !== -1;
+                });
+            }
             if (rows.length === 0) { alert('Nothing to order.'); return; }
             const perKey = s.period === 'weekly' ? 'perWeek' : 'perMonth';
             rows.sort((a, b) => (a.vendorNo || 'zzz').localeCompare(b.vendorNo || 'zzz') || b[perKey] - a[perKey]);
