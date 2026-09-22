@@ -265,12 +265,15 @@
         /* Toast notification system (BUG 1) */
         /* Order Planner sits above everything, including the import badges */
         #plannerModal { z-index: 10500; }
-        /* When the Container Planner is adopted into the vendor popup, keep
-           its title + method + action buttons pinned while the tables scroll. */
-        #plannerVendorContainerHost .table-header-bar {
-            position: sticky; top: 0; z-index: 60; background: white;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        /* When the Container Planner is adopted into the vendor popup, the
+           whole top block (title, methods, action buttons, forecast settings,
+           CBM summary) is pinned — only the item table area scrolls. */
+        #plannerVendorContainerHost { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+        #plannerVendorContainerHost #containerSection {
+            display: flex !important; flex-direction: column;
+            min-height: 0; margin-top: 0 !important; overflow: visible;
         }
+        #plannerVendorContainerHost #containerContent { flex: 1; min-height: 0; overflow-y: auto; }
         .import-badges {
             /* Anchored to the top of the PAGE (not the viewport) so the
                badges stay up in the header and scroll away with it. */
@@ -3820,7 +3823,10 @@
                 const dv = getDisplayValues(d, plannerState.method);
                 let forecast = dv['forecast_' + months + 'm'];
                 if (forecast == null) forecast = Math.ceil((dv.monthly_avg || 0) * months);
-                if (!forecast || forecast <= 0) continue;
+                if (!isFinite(forecast) || forecast < 0) forecast = 0;
+                // NOTE: zero forecast does NOT skip the item — committed sales
+                // orders alone can still demand stock (net > 0), matching the
+                // Container Planner's netting.
                 const od = orderData[d.item_no] || { salesQty: 0, purchQty: 0, availInv: 0 };
                 const net = Math.max(0, forecast + od.salesQty - od.availInv - od.purchQty);
                 if (net <= 0) continue;
@@ -4076,8 +4082,14 @@
             plannerPrevVendorFilter = selectedVendor;
             selectVendor(plannerVendorKey);   // filters main data → container plan builds for this vendor
             document.getElementById('plannerVendorContainerHost').appendChild(section);
-            document.getElementById('plannerVendorContainerHost').style.display = 'block';
+            document.getElementById('plannerVendorContainerHost').style.display = 'flex';
             document.getElementById('plannerVendorContent').style.display = 'none';
+            // The wrapper stops scrolling; the container's item table scrolls
+            // internally so the whole top block stays pinned.
+            const scrollEl = document.getElementById('plannerVendorScroll');
+            scrollEl.style.overflowY = 'hidden';
+            scrollEl.style.display = 'flex';
+            scrollEl.style.flexDirection = 'column';
             plannerVendorShowingContainer = true;
             const btn = document.getElementById('plannerVendorContainerBtn');
             if (btn) btn.textContent = 'Back to Ordering Schedule';
@@ -4090,6 +4102,10 @@
             }
             document.getElementById('plannerVendorContainerHost').style.display = 'none';
             document.getElementById('plannerVendorContent').style.display = '';
+            const scrollEl = document.getElementById('plannerVendorScroll');
+            scrollEl.style.overflowY = '';
+            scrollEl.style.display = '';
+            scrollEl.style.flexDirection = '';
             plannerVendorShowingContainer = false;
             if (plannerPrevVendorFilter !== null && plannerPrevVendorFilter !== selectedVendor) {
                 selectVendor(plannerPrevVendorFilter);
