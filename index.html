@@ -578,10 +578,13 @@
 
     <!-- Item Detail Modal -->
     <div class="modal-overlay" id="detailModal" onmousedown="this._mouseDownTarget=event.target" onmouseup="if(event.target===this&&this._mouseDownTarget===this)closeDetail()">
-        <div style="background:white;border-radius:12px;padding:30px;max-width:900px;width:90%;max-height:85vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+        <div id="detailCard" style="background:white;border-radius:12px;padding:30px;max-width:900px;width:90%;max-height:85vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,0.3);">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
                 <h2 style="color:#1a237e;font-size:18px;" id="detailTitle">Item Detail</h2>
-                <span style="cursor:pointer;font-size:22px;color:#999;" onclick="closeDetail()">&times;</span>
+                <span style="display:flex;gap:14px;align-items:center;">
+                    <button type="button" id="detailMaxBtn" onclick="toggleDetailMax()" style="background:white;border:1px solid #ccc;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;color:#444;">&#x26F6; Full screen</button>
+                    <span style="cursor:pointer;font-size:22px;color:#999;" onclick="closeDetail()">&times;</span>
+                </span>
             </div>
             <div id="detailContent"></div>
         </div>
@@ -3737,6 +3740,18 @@
             document.getElementById('detailModal').classList.remove('active');
         }
 
+        // Item Detail modal maximize/restore
+        let detailMaximized = false;
+        const DETAIL_CARD_BASE = 'background:white;border-radius:12px;padding:30px;max-width:900px;width:90%;max-height:85vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,0.3);';
+        const DETAIL_CARD_MAX = 'background:white;border-radius:0;padding:30px;max-width:100vw;width:100vw;height:100vh;max-height:100vh;overflow-y:auto;';
+        function toggleDetailMax() {
+            detailMaximized = !detailMaximized;
+            const card = document.getElementById('detailCard');
+            if (card) card.setAttribute('style', detailMaximized ? DETAIL_CARD_MAX : DETAIL_CARD_BASE);
+            const btn = document.getElementById('detailMaxBtn');
+            if (btn) btn.innerHTML = detailMaximized ? '&#x1F5D7; Restore' : '&#x26F6; Full screen';
+        }
+
         // ============================================================
         // ORDER PLANNER — weekly/monthly ordering schedule per vendor/item.
         // Always nets off current stock: need = forecast + on sales order
@@ -3776,6 +3791,14 @@
             closePlannerVendor();
             document.getElementById('plannerModal').classList.remove('active');
             document.body.style.overflow = '';
+            // A closed planner forgets everything: next open starts fresh.
+            plannerState.period = 'weekly';
+            plannerState.group = 'vendor';
+            plannerState.months = 6;
+            plannerState.method = 'standard';
+            plannerState.search = '';
+            plannerState.maximized = false;
+            plannerSort = { key: 'per', dir: 'desc' };
         }
         function setPlannerOpt(key, value) {
             plannerState[key] = key === 'months' ? parseFloat(value) : value;
@@ -4124,7 +4147,9 @@
             document.getElementById('plannerVendorContainerHost').style.display = 'none';
             document.getElementById('plannerVendorContent').style.display = '';
             const scrollEl = document.getElementById('plannerVendorScroll');
-            scrollEl.style.overflowY = '';
+            // Restore the ORIGINAL inline value — clearing it ('') removed
+            // overflow-y entirely and left the popup unscrollable.
+            scrollEl.style.overflowY = 'auto';
             scrollEl.style.display = '';
             scrollEl.style.flexDirection = '';
             plannerVendorShowingContainer = false;
