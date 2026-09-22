@@ -3027,13 +3027,8 @@
                 html += '</table></div>';
             }
 
-            if (itemsNoCubage && itemsNoCubage.length > 0) {
-                html += '<div style="margin-top:10px;font-size:12px;background:#fff3e0;border:1px solid #ffb74d;border-radius:8px;padding:10px 14px;color:#e65100;">'
-                    + '<strong>&#9888; ' + itemsNoCubage.length + ' item' + (itemsNoCubage.length === 1 ? '' : 's') + ' left out — no cubage (CBM) data:</strong> '
-                    + itemsNoCubage.slice(0, 15).map(x => esc(x)).join(', ') + (itemsNoCubage.length > 15 ? '…' : '')
-                    + '<br><span style="color:#8d6e63;">These items still need ordering (see the Order Planner), but without a CBM-per-unit they cannot be fitted into container space. Add their cubage to include them.</span></div>';
-            }
-
+            // (No-cubage exclusions are flagged in the summary row tile next
+            // to Utilisation — no repeat banner down here.)
             const pfPanel = document.getElementById('predictedForecastPanel');
             const pfHtml = pfPanel ? pfPanel.innerHTML : '';
             document.getElementById('containerContent').innerHTML = html;
@@ -4053,15 +4048,24 @@
             const v = plannerVendorKey;
             return computePlannerRows().filter(r => (r.vendorNo || '__none__') === v);
         }
+        // Overseas / container vendors — the only ones that get the Container
+        // Planner button in the vendor popup. Derived from cubage coverage in
+        // the UOM table (vendors whose range is genuinely containered), NOT
+        // from the odd stray cubage item (e.g. RapidFlow has 3 of 151).
+        // Edit this list to add or remove a vendor.
+        const CONTAINER_VENDORS = new Set([
+            '2124',  // Grandaire
+            '2457',  // TAIHE GROUP
+            '2123',  // LEADER HVAC EQUIPMENT TRADING CO. (HK)
+            '2376',  // ICOOL PACIFIC
+            '2345',  // iZone
+            '2410',  // Air Conditioning Direct
+            '2153',  // GUANGZHOU JZ.FOREVER TRADE CO.
+            '2167',  // Xiamen UNT Duct Technology
+            '2367',  // Shenzhen Hongguan Mechatronics
+        ]);
         function plannerVendorHasCubage(v) {
-            for (const itemNo in vendorMapping) {
-                const vends = vendorMapping[itemNo];
-                if (!vends || vends[0] !== v) continue;
-                const u = uomData[itemNo] || uomData[String(itemNo).toUpperCase()];
-                if (!u) continue;
-                for (const k in u) { if (u[k] && u[k].c > 0) return true; }
-            }
-            return false;
+            return CONTAINER_VENDORS.has(String(v));
         }
         function renderPlannerVendorDetail() {
             const s = plannerState;
