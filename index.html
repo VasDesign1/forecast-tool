@@ -265,6 +265,12 @@
         /* Toast notification system (BUG 1) */
         /* Order Planner sits above everything, including the import badges */
         #plannerModal { z-index: 10500; }
+        /* When the Container Planner is adopted into the vendor popup, keep
+           its title + method + action buttons pinned while the tables scroll. */
+        #plannerVendorContainerHost .table-header-bar {
+            position: sticky; top: 0; z-index: 60; background: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
         .import-badges {
             /* Anchored to the top of the PAGE (not the viewport) so the
                badges stay up in the header and scroll away with it. */
@@ -524,12 +530,12 @@
                         </button>
                     </div>
                 </div>
-                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-                    <button class="btn btn-outline" id="fillContainerBtn" onclick="fillContainer()">Optimize Containers</button>
-                    <button class="btn btn-outline" style="color:#1565c0;border-color:#1565c0;" id="predictForecastBtn" onclick="showPredictedForecast()">Predicted Forecast</button>
-                    <button class="btn btn-outline" style="color:#c62828;border-color:#c62828;" onclick="resetContainerPlan()">Reset</button>
-                    <button class="btn btn-outline" style="color:#2e7d32;border-color:#2e7d32;" onclick="exportContainerExcel()">Export to Excel</button>
-                <button class="btn btn-outline" style="color:#1565c0;border-color:#1565c0;" onclick="exportContainerPO()">Export to Excel for PO</button>
+                <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                    <button class="btn btn-outline" id="fillContainerBtn" style="padding:5px 10px;font-size:12px;" onclick="fillContainer()">Optimize Containers</button>
+                    <button class="btn btn-outline" style="padding:5px 10px;font-size:12px;color:#1565c0;border-color:#1565c0;" id="predictForecastBtn" onclick="showPredictedForecast()">Predicted Forecast</button>
+                    <button class="btn btn-outline" style="padding:5px 10px;font-size:12px;color:#c62828;border-color:#c62828;" onclick="resetContainerPlan()">Reset</button>
+                    <button class="btn btn-outline" style="padding:5px 10px;font-size:12px;color:#2e7d32;border-color:#2e7d32;" onclick="exportContainerExcel()">Export to Excel</button>
+                    <button class="btn btn-outline" style="padding:5px 10px;font-size:12px;color:#1565c0;border-color:#1565c0;" onclick="exportContainerPO()">Export to Excel for PO</button>
                 </div>
             </div>
             <!-- Custom Forecast Pane for Container Planning -->
@@ -602,7 +608,7 @@
 
     <!-- Order Planner: single-vendor drill-down popup -->
     <div class="modal-overlay" id="plannerVendorModal" style="z-index:10600;" onmousedown="this._mouseDownTarget=event.target" onmouseup="if(event.target===this&&this._mouseDownTarget===this)closePlannerVendor()">
-        <div style="background:white;border-radius:12px;padding:0;max-width:1500px;width:96vw;height:92vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,0.35);">
+        <div id="plannerVendorCard" style="background:white;border-radius:12px;padding:0;max-width:1500px;width:96vw;height:92vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,0.35);">
             <!-- Pinned head: vendor title, stats and buttons never scroll -->
             <div style="padding:18px 26px 12px;border-bottom:1px solid #eee;flex-shrink:0;">
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
@@ -610,6 +616,7 @@
                     <span style="display:flex;gap:10px;align-items:center;">
                         <button type="button" id="plannerVendorContainerBtn" class="btn btn-outline" style="padding:5px 12px;font-size:12px;color:#7b1fa2;border-color:#7b1fa2;" onclick="toggleVendorContainerPlanner()">Container Planner</button>
                         <button type="button" class="btn btn-outline" style="padding:5px 12px;font-size:12px;" onclick="plannerVendorExportCSV()">Export CSV</button>
+                        <button type="button" id="plannerVendorMaxBtn" onclick="toggleVendorMax()" style="background:white;border:1px solid #ccc;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;color:#444;">&#x26F6; Full screen</button>
                         <span style="cursor:pointer;font-size:22px;color:#999;" onclick="closePlannerVendor()">&times;</span>
                     </span>
                 </div>
@@ -3002,7 +3009,10 @@
             }
 
             if (itemsNoCubage && itemsNoCubage.length > 0) {
-                html += '<div style="margin-top:10px;font-size:11px;color:#999;">Items without cubage data (' + itemsNoCubage.length + '): ' + itemsNoCubage.slice(0, 15).map(x => esc(x)).join(', ') + (itemsNoCubage.length > 15 ? '...' : '') + '</div>';
+                html += '<div style="margin-top:10px;font-size:12px;background:#fff3e0;border:1px solid #ffb74d;border-radius:8px;padding:10px 14px;color:#e65100;">'
+                    + '<strong>&#9888; ' + itemsNoCubage.length + ' item' + (itemsNoCubage.length === 1 ? '' : 's') + ' left out — no cubage (CBM) data:</strong> '
+                    + itemsNoCubage.slice(0, 15).map(x => esc(x)).join(', ') + (itemsNoCubage.length > 15 ? '…' : '')
+                    + '<br><span style="color:#8d6e63;">These items still need ordering (see the Order Planner), but without a CBM-per-unit they cannot be fitted into container space. Add their cubage to include them.</span></div>';
             }
 
             const pfPanel = document.getElementById('predictedForecastPanel');
@@ -3772,6 +3782,20 @@
             const btn = document.getElementById('plannerMaxBtn');
             if (btn) btn.innerHTML = plannerState.maximized ? '&#x1F5D7; Restore' : '&#x26F6; Full screen';
         }
+        // The vendor popup gets its own maximize/restore, independent of the planner's.
+        let plannerVendorMaximized = false;
+        const PLANNER_VENDOR_CARD_BASE = 'background:white;border-radius:12px;padding:0;max-width:1500px;width:96vw;height:92vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,0.35);';
+        const PLANNER_VENDOR_CARD_MAX = 'background:white;border-radius:0;padding:0;max-width:100vw;width:100vw;height:100vh;display:flex;flex-direction:column;overflow:hidden;';
+        function toggleVendorMax() {
+            plannerVendorMaximized = !plannerVendorMaximized;
+            applyVendorSize();
+        }
+        function applyVendorSize() {
+            const card = document.getElementById('plannerVendorCard');
+            if (card) card.setAttribute('style', plannerVendorMaximized ? PLANNER_VENDOR_CARD_MAX : PLANNER_VENDOR_CARD_BASE);
+            const btn = document.getElementById('plannerVendorMaxBtn');
+            if (btn) btn.innerHTML = plannerVendorMaximized ? '&#x1F5D7; Restore' : '&#x26F6; Full screen';
+        }
         // Search re-renders only the content, so the input keeps focus while typing.
         function plannerSearchInput(v) {
             clearTimeout(plannerSearchTimer);
@@ -3995,6 +4019,7 @@
         function openPlannerVendor(encKey) {
             plannerVendorKey = decodeURIComponent(encKey);
             hideVendorContainerPlanner();
+            applyVendorSize();
             renderPlannerVendorDetail();
             document.getElementById('plannerVendorModal').classList.add('active');
         }
