@@ -2866,13 +2866,16 @@
             html += '<div style="background:#e8f5e9;padding:10px 18px;border-radius:8px;text-align:center;"><div style="font-size:20px;font-weight:700;color:#2e7d32;">' + remainingCbm.toFixed(2) + '</div><div style="font-size:10px;color:#666;">Remaining CBM</div></div>';
             html += '<div style="background:#fff3e0;padding:10px 18px;border-radius:8px;text-align:center;"><div style="font-size:20px;font-weight:700;color:#e65100;">' + utilisation + '%</div><div style="font-size:10px;color:#666;">Utilisation</div></div>';
 
-            // No-cubage warning tile, right next to Utilisation so it can't be missed
+            // No-cubage warning tile — stretches across the rest of the summary
+            // row so the whole message reads in full.
             if (containerNoCubageItems.length > 0) {
-                const listShort = containerNoCubageItems.slice(0, 6).map(x => esc(x)).join(', ') + (containerNoCubageItems.length > 6 ? '…' : '');
+                const CAP = 40;
+                const listShown = containerNoCubageItems.slice(0, CAP).map(x => esc(x)).join(', ')
+                    + (containerNoCubageItems.length > CAP ? ' … +' + (containerNoCubageItems.length - CAP) + ' more (hover for all)' : '');
                 const listFull = containerNoCubageItems.join(', ');
-                html += '<div title="' + escAttr('Not in this container plan (no CBM data): ' + listFull) + '" style="background:#fff3e0;border:1px solid #ffb74d;padding:8px 14px;border-radius:8px;max-width:430px;">'
+                html += '<div title="' + escAttr('Not in this container plan (no CBM data): ' + listFull) + '" style="background:#fff3e0;border:1px solid #ffb74d;padding:8px 14px;border-radius:8px;flex:1;min-width:280px;">'
                     + '<div style="font-size:13px;font-weight:700;color:#e65100;">&#9888; ' + containerNoCubageItems.length + ' item' + (containerNoCubageItems.length === 1 ? '' : 's') + ' left out — no cubage (CBM) data</div>'
-                    + '<div style="font-size:10px;color:#8d6e63;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + listShort + ' — hover for the full list, details below the table</div>'
+                    + '<div style="font-size:11px;color:#8d6e63;">' + listShown + ' — these still need ordering (see the Order Planner); add their cubage to include them here.</div>'
                     + '</div>';
             }
 
