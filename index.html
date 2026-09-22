@@ -266,7 +266,9 @@
         /* Order Planner sits above everything, including the import badges */
         #plannerModal { z-index: 10500; }
         .import-badges {
-            position: fixed; top: 20px; right: 20px; z-index: 9999;
+            /* Anchored to the top of the PAGE (not the viewport) so the
+               badges stay up in the header and scroll away with it. */
+            position: absolute; top: 20px; right: 20px; z-index: 9999;
             display: flex; flex-direction: row; gap: 8px;
         }
         .import-badge {
@@ -589,6 +591,20 @@
             <div style="font-size:12px;color:#666;margin-bottom:14px;">How much to order to cover forecast demand — after subtracting stock on hand, incoming purchase orders and committed sales orders. Quantities are rounded up.</div>
             <div id="plannerControls"></div>
             <div id="plannerContent"></div>
+        </div>
+    </div>
+
+    <!-- Order Planner: single-vendor drill-down popup -->
+    <div class="modal-overlay" id="plannerVendorModal" style="z-index:10600;" onmousedown="this._mouseDownTarget=event.target" onmouseup="if(event.target===this&&this._mouseDownTarget===this)closePlannerVendor()">
+        <div style="background:white;border-radius:12px;padding:26px;max-width:1000px;width:92%;max-height:85vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,0.35);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:12px;">
+                <h2 style="color:#1a237e;font-size:16px;" id="plannerVendorTitle">Vendor</h2>
+                <span style="display:flex;gap:12px;align-items:center;">
+                    <button type="button" class="btn btn-outline" style="padding:5px 12px;font-size:12px;" onclick="plannerVendorExportCSV()">Export CSV</button>
+                    <span style="cursor:pointer;font-size:22px;color:#999;" onclick="closePlannerVendor()">&times;</span>
+                </span>
+            </div>
+            <div id="plannerVendorContent"></div>
         </div>
     </div>
 
@@ -3687,11 +3703,13 @@
         // ORDER PLANNER — weekly/monthly ordering schedule per vendor/item.
         // Always nets off current stock: need = forecast + on sales order
         // − inventory − on purchase order (floored at 0). True calendar
-        // weeks: 3M = 13, 6M = 26, 12M = 52.
+        // weeks: 13 / 26 / 52 (custom months → round(m × 52/12)).
+        // Vendor view = compact tiles, easy on the eye; clicking a tile
+        // opens that vendor's full schedule in its own popup.
         // ============================================================
         const plannerState = { period: 'weekly', group: 'vendor', months: 6, method: 'standard', search: '', maximized: false };
-        const plannerExpanded = new Set();   // vendor keys whose section is open
         let plannerSearchTimer = null;
+        let plannerVendorKey = null;   // vendor open in the drill-down popup
         const PLANNER_METHODS = [
             { key: 'standard', label: 'Standard' },
             { key: 'wma', label: 'WMA' },
@@ -3714,6 +3732,11 @@
         function setPlannerOpt(key, value) {
             plannerState[key] = key === 'months' ? parseInt(value) : value;
             renderPlanner();
+            if (document.getElementById('plannerVendorModal').classList.contains('active')) renderPlannerVendorDetail();
+        }
+        function setPlannerCustomMonths(v) {
+            const n = parseInt(v);
+            if (n >= 1 && n <= 60) setPlannerOpt('months', n);
         }
         function togglePlannerMax() {
             plannerState.maximized = !plannerState.maximized;
@@ -3733,18 +3756,13 @@
                 renderPlannerContent();
             }, 150);
         }
-        function togglePlannerVendor(encKey) {
-            const k = decodeURIComponent(encKey);
-            if (plannerExpanded.has(k)) plannerExpanded.delete(k); else plannerExpanded.add(k);
-            renderPlannerContent();
-        }
-        function plannerExpandAll(open) {
-            plannerExpanded.clear();
-            if (open) for (const r of computePlannerRows()) plannerExpanded.add(r.vendorNo || '__none__');
-            renderPlannerContent();
-        }
 
         function plannerWeeks(months) { return Math.round(months * 52 / 12); }  // 13 / 26 / 52
+        function plannerPerKey() { return plannerState.period === 'weekly' ? 'perWeek' : 'perMonth'; }
+        function plannerPerLabel() { return plannerState.period === 'weekly' ? 'Order / Week' : 'Order / Month'; }
+        function plannerVendorLabelOf(r) {
+            return r.vendorNo ? vendorDisplayLabel(r.vendorNo).toLowerCase() : 'no vendor assigned';
+        }
 
         function computePlannerRows() {
             const months = plannerState.months;
@@ -3775,6 +3793,20 @@
             return rows;
         }
 
+        // Search scope follows the grouping: Vendor view searches vendors
+        // only; Item view searches item no. / description only.
+        function plannerFilteredRows() {
+            const s = plannerState, q = s.search;
+            let rows = computePlannerRows();
+            if (!q) return rows;
+            if (s.group === 'vendor') {
+                return rows.filter(r => plannerVendorLabelOf(r).indexOf(q) !== -1);
+            }
+            return rows.filter(r =>
+                r.itemNo.toLowerCase().indexOf(q) !== -1
+                || r.description.toLowerCase().indexOf(q) !== -1);
+        }
+
         function plannerChip(active, onclick, label) {
             const style = active
                 ? 'background:#1a237e;color:white;border:1px solid #1a237e;'
@@ -3790,6 +3822,7 @@
         function renderPlannerControls() {
             const s = plannerState;
             const months = s.months;
+            const isPreset = months === 3 || months === 6 || months === 12;
             let ch = '<div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin-bottom:10px;font-size:12px;">';
             ch += '<span><strong style="color:#555;">Period:</strong> '
                 + plannerChip(s.period === 'weekly', "setPlannerOpt('period','weekly')", 'Weekly') + ' '
@@ -3800,41 +3833,52 @@
             ch += '<span><strong style="color:#555;">Horizon:</strong> '
                 + plannerChip(months === 3, "setPlannerOpt('months','3')", '3M') + ' '
                 + plannerChip(months === 6, "setPlannerOpt('months','6')", '6M') + ' '
-                + plannerChip(months === 12, "setPlannerOpt('months','12')", '12M') + '</span>';
+                + plannerChip(months === 12, "setPlannerOpt('months','12')", '12M') + ' '
+                + '<input type="number" min="1" max="60" id="plannerCustomMonths" value="' + (isPreset ? '' : months) + '" placeholder="custom"'
+                + ' onchange="setPlannerCustomMonths(this.value)"'
+                + ' style="width:64px;padding:6px 8px;border-radius:6px;font-size:12px;border:1px solid ' + (isPreset ? '#ccc' : '#1a237e') + ';' + (isPreset ? '' : 'background:#e8eaf6;font-weight:700;color:#1a237e;') + '">'
+                + ' <span style="color:#888;">months</span></span>';
             ch += '<span><strong style="color:#555;">Method:</strong> '
                 + PLANNER_METHODS.map(m => plannerChip(s.method === m.key, "setPlannerOpt('method','" + m.key + "')", m.label)).join(' ') + '</span>';
             ch += '<button type="button" class="btn btn-outline" style="padding:6px 12px;font-size:12px;" onclick="plannerExportCSV()">Export CSV</button>';
             ch += '</div>';
             ch += '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px;font-size:12px;">';
-            ch += '<input type="text" id="plannerSearch" placeholder="Search vendor or item..." value="' + escAttr(s.search) + '" oninput="plannerSearchInput(this.value)"'
+            ch += '<input type="text" id="plannerSearch" placeholder="' + (s.group === 'vendor' ? 'Search vendors...' : 'Search item no. or description...') + '" value="' + escAttr(s.search) + '" oninput="plannerSearchInput(this.value)"'
                 + ' style="flex:1;min-width:220px;max-width:420px;padding:7px 12px;border:1px solid #ccc;border-radius:6px;font-size:12px;">';
-            if (s.group === 'vendor') {
-                ch += '<button type="button" style="background:white;color:#444;border:1px solid #ccc;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;" onclick="plannerExpandAll(true)">Expand all</button>';
-                ch += '<button type="button" style="background:white;color:#444;border:1px solid #ccc;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;" onclick="plannerExpandAll(false)">Collapse all</button>';
-            }
             ch += '</div>';
             document.getElementById('plannerControls').innerHTML = ch;
+        }
+
+        // ---- Shared table builders (used by the item view and the vendor popup) ----
+        function plannerTableHead(withVendor) {
+            const thS = 'background:#e8eaf6;padding:8px 10px;color:#1a237e;font-weight:600;font-size:11px;text-align:right;position:sticky;top:0;';
+            const thL = thS + 'text-align:left;';
+            let h = '<tr><th style="' + thL + '">Item</th><th style="' + thL + '">Description</th>';
+            if (withVendor) h += '<th style="' + thL + '">Vendor</th>';
+            h += '<th style="' + thS + '">Forecast ' + plannerState.months + 'M</th><th style="' + thS + '">On Hand</th><th style="' + thS + '">On PO</th><th style="' + thS + '">On SO</th><th style="' + thS + '">Net to Order</th><th style="' + thS + 'color:#e65100;">' + plannerPerLabel() + '</th></tr>';
+            return h;
+        }
+        function plannerTableRow(r, withVendor) {
+            const td = 'padding:5px 10px;border-bottom:1px solid #eee;font-size:12px;';
+            const tdR = td + 'text-align:right;';
+            let h = '<tr><td style="' + td + 'font-weight:600;">' + esc(r.itemNo) + '</td><td style="' + td + '">' + esc(r.description) + '</td>';
+            if (withVendor) h += '<td style="' + td + '">' + esc(r.vendorNo ? vendorDisplayLabel(r.vendorNo) : '-') + '</td>';
+            h += '<td style="' + tdR + '">' + Math.round(r.forecast).toLocaleString() + '</td>'
+               + '<td style="' + tdR + '">' + Math.round(r.availInv).toLocaleString() + '</td>'
+               + '<td style="' + tdR + '">' + Math.round(r.purchQty).toLocaleString() + '</td>'
+               + '<td style="' + tdR + '">' + Math.round(r.salesQty).toLocaleString() + '</td>'
+               + '<td style="' + tdR + 'font-weight:600;">' + Math.round(r.net).toLocaleString() + '</td>'
+               + '<td style="' + tdR + 'font-weight:700;color:#e65100;">' + r[plannerPerKey()].toLocaleString() + '</td></tr>';
+            return h;
         }
 
         function renderPlannerContent() {
             const s = plannerState;
             const months = s.months;
             const weeks = plannerWeeks(months);
-            const perLabel = s.period === 'weekly' ? 'Order / Week' : 'Order / Month';
-            const perKey = s.period === 'weekly' ? 'perWeek' : 'perMonth';
+            const perKey = plannerPerKey();
             const q = s.search;
-
-            let rows = computePlannerRows();
-            // Search: a vendor-name hit keeps the vendor's whole list; otherwise
-            // match on item number / description.
-            if (q) {
-                rows = rows.filter(r => {
-                    const vend = r.vendorNo ? vendorDisplayLabel(r.vendorNo).toLowerCase() : 'no vendor assigned';
-                    return vend.indexOf(q) !== -1
-                        || r.itemNo.toLowerCase().indexOf(q) !== -1
-                        || r.description.toLowerCase().indexOf(q) !== -1;
-                });
-            }
+            const rows = plannerFilteredRows();
             const totalNet = rows.reduce((a, r) => a + r.net, 0);
             const totalPer = rows.reduce((a, r) => a + r[perKey], 0);
 
@@ -3844,42 +3888,18 @@
             html += '<div style="background:#fff3e0;padding:10px 16px;border-radius:8px;text-align:center;"><div style="font-size:18px;font-weight:700;color:#e65100;">' + Math.round(totalPer).toLocaleString() + '</div><div style="font-size:10px;color:#666;">Units ' + (s.period === 'weekly' ? 'per Week (' + weeks + ' weeks)' : 'per Month') + '</div></div>';
             html += '</div>';
 
-            const thS = 'background:#e8eaf6;padding:8px 10px;color:#1a237e;font-weight:600;font-size:11px;text-align:right;position:sticky;top:0;';
-            const thL = thS + 'text-align:left;';
-            const td = 'padding:5px 10px;border-bottom:1px solid #eee;font-size:12px;';
-            const tdR = td + 'text-align:right;';
-
-            function tableHead(withVendor) {
-                let h = '<tr><th style="' + thL + '">Item</th><th style="' + thL + '">Description</th>';
-                if (withVendor) h += '<th style="' + thL + '">Vendor</th>';
-                h += '<th style="' + thS + '">Forecast ' + months + 'M</th><th style="' + thS + '">On Hand</th><th style="' + thS + '">On PO</th><th style="' + thS + '">On SO</th><th style="' + thS + '">Net to Order</th><th style="' + thS + 'color:#e65100;">' + perLabel + '</th></tr>';
-                return h;
-            }
-            function tableRow(r, withVendor) {
-                let h = '<tr><td style="' + td + 'font-weight:600;">' + esc(r.itemNo) + '</td><td style="' + td + '">' + esc(r.description) + '</td>';
-                if (withVendor) h += '<td style="' + td + '">' + esc(r.vendorNo ? vendorDisplayLabel(r.vendorNo) : '-') + '</td>';
-                h += '<td style="' + tdR + '">' + Math.round(r.forecast).toLocaleString() + '</td>'
-                   + '<td style="' + tdR + '">' + Math.round(r.availInv).toLocaleString() + '</td>'
-                   + '<td style="' + tdR + '">' + Math.round(r.purchQty).toLocaleString() + '</td>'
-                   + '<td style="' + tdR + '">' + Math.round(r.salesQty).toLocaleString() + '</td>'
-                   + '<td style="' + tdR + 'font-weight:600;">' + Math.round(r.net).toLocaleString() + '</td>'
-                   + '<td style="' + tdR + 'font-weight:700;color:#e65100;">' + r[perKey].toLocaleString() + '</td></tr>';
-                return h;
-            }
-
             if (rows.length === 0) {
                 html += '<div style="padding:30px;text-align:center;color:#888;">' + (q
-                    ? 'No vendors or items match "' + esc(q) + '".'
+                    ? 'No ' + (s.group === 'vendor' ? 'vendors' : 'items') + ' match "' + esc(q) + '".'
                     : 'Nothing to order — current stock and incoming purchase orders cover the ' + months + '-month forecast for every item.') + '</div>';
             } else if (s.group === 'item') {
                 rows.sort((a, b) => b[perKey] - a[perKey]);
-                html += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">' + tableHead(true);
-                for (const r of rows) html += tableRow(r, true);
+                html += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">' + plannerTableHead(true);
+                for (const r of rows) html += plannerTableRow(r, true);
                 html += '</table></div>';
             } else {
-                // Group by vendor — collapsed by default, click the bar to
-                // expand. "No vendor assigned" always sorts last. A search
-                // forces matching sections open.
+                // Vendor tiles — one small card per vendor, "No vendor" last.
+                // Click a tile to open that vendor's full schedule.
                 const byVendor = {};
                 for (const r of rows) {
                     const v = r.vendorNo || '__none__';
@@ -3888,44 +3908,64 @@
                 const sub = k => byVendor[k].reduce((x, r) => x + r[perKey], 0);
                 const vendorKeys = Object.keys(byVendor).sort((a, b) =>
                     ((a === '__none__') - (b === '__none__')) || (sub(b) - sub(a)));
+                html += '<div style="font-size:11px;color:#888;margin-bottom:8px;">Click a vendor to open its full ordering schedule.</div>';
+                html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:10px;">';
                 for (const v of vendorKeys) {
                     const vRows = byVendor[v];
-                    vRows.sort((a, b) => b[perKey] - a[perKey]);
-                    const subPer = vRows.reduce((x, r) => x + r[perKey], 0);
-                    const subNet = vRows.reduce((x, r) => x + r.net, 0);
-                    const label = v === '__none__' ? 'No vendor assigned' : vendorDisplayLabel(v);
-                    const isOpen = q ? true : plannerExpanded.has(v);
+                    const subPer = sub(v);
+                    const isNone = v === '__none__';
                     const encKey = encodeURIComponent(v).replace(/'/g, '%27');
-                    html += '<div style="margin-bottom:' + (isOpen ? '18px' : '8px') + ';">';
-                    html += '<div onclick="togglePlannerVendor(\'' + encKey + '\')" style="cursor:pointer;user-select:none;background:#1a237e;color:white;padding:8px 12px;border-radius:' + (isOpen ? '8px 8px 0 0' : '8px') + ';font-size:13px;font-weight:600;display:flex;justify-content:space-between;">'
-                          + '<span>' + (isOpen ? '&#x25BE;' : '&#x25B8;') + ' ' + esc(label) + ' <span style="opacity:0.7;font-weight:400;">(' + vRows.length + ' items)</span></span>'
-                          + '<span>' + Math.round(subPer).toLocaleString() + ' units ' + (s.period === 'weekly' ? '/ week' : '/ month') + ' · ' + Math.round(subNet).toLocaleString() + ' net over ' + months + 'M</span></div>';
-                    if (isOpen) {
-                        html += '<div style="overflow-x:auto;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 8px 8px;"><table style="width:100%;border-collapse:collapse;">' + tableHead(false);
-                        for (const r of vRows) html += tableRow(r, false);
-                        html += '</table></div>';
-                    }
-                    html += '</div>';
+                    html += '<div onclick="openPlannerVendor(\'' + encKey + '\')" style="cursor:pointer;background:' + (isNone ? '#f5f5f5' : '#e8eaf6') + ';border:1px solid ' + (isNone ? '#ddd' : '#c5cae9') + ';border-radius:10px;padding:10px 12px;transition:box-shadow 0.15s;" onmouseover="this.style.boxShadow=\'0 3px 10px rgba(26,35,126,0.25)\'" onmouseout="this.style.boxShadow=\'none\'">'
+                        + '<div style="font-weight:700;color:#1a237e;font-size:13px;">' + (isNone ? 'No vendor' : esc(v)) + '</div>'
+                        + '<div style="font-size:10px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + escAttr(isNone ? 'Items without an assigned vendor' : (vendorNames[v] || '')) + '">' + (isNone ? 'Unassigned items' : esc(vendorNames[v] || '&nbsp;')) + '</div>'
+                        + '<div style="margin-top:6px;display:flex;justify-content:space-between;font-size:11px;"><span style="color:#888;">' + vRows.length + ' item' + (vRows.length === 1 ? '' : 's') + '</span><span style="font-weight:700;color:#e65100;">' + Math.round(subPer).toLocaleString() + ' / ' + (s.period === 'weekly' ? 'wk' : 'mo') + '</span></div>'
+                        + '</div>';
                 }
+                html += '</div>';
             }
             document.getElementById('plannerContent').innerHTML = html;
         }
 
-        function plannerExportCSV() {
+        // ---- Single-vendor drill-down popup ----
+        function openPlannerVendor(encKey) {
+            plannerVendorKey = decodeURIComponent(encKey);
+            renderPlannerVendorDetail();
+            document.getElementById('plannerVendorModal').classList.add('active');
+        }
+        function closePlannerVendor() {
+            document.getElementById('plannerVendorModal').classList.remove('active');
+        }
+        function plannerVendorRows() {
+            const v = plannerVendorKey;
+            return computePlannerRows().filter(r => (r.vendorNo || '__none__') === v);
+        }
+        function renderPlannerVendorDetail() {
             const s = plannerState;
-            let rows = computePlannerRows();
-            const q = s.search;
-            if (q) {
-                rows = rows.filter(r => {
-                    const vend = r.vendorNo ? vendorDisplayLabel(r.vendorNo).toLowerCase() : 'no vendor assigned';
-                    return vend.indexOf(q) !== -1
-                        || r.itemNo.toLowerCase().indexOf(q) !== -1
-                        || r.description.toLowerCase().indexOf(q) !== -1;
-                });
+            const v = plannerVendorKey;
+            const perKey = plannerPerKey();
+            const rows = plannerVendorRows();
+            rows.sort((a, b) => b[perKey] - a[perKey]);
+            const subPer = rows.reduce((x, r) => x + r[perKey], 0);
+            const subNet = rows.reduce((x, r) => x + r.net, 0);
+            const label = v === '__none__' ? 'No vendor assigned' : vendorDisplayLabel(v);
+            document.getElementById('plannerVendorTitle').textContent = label;
+            let html = '<div style="font-size:12px;color:#555;margin-bottom:12px;">'
+                + '<strong>' + rows.length + '</strong> items · <strong style="color:#e65100;">' + Math.round(subPer).toLocaleString() + '</strong> units ' + (s.period === 'weekly' ? 'per week' : 'per month')
+                + ' · <strong>' + Math.round(subNet).toLocaleString() + '</strong> net over ' + s.months + ' months (' + PLANNER_METHODS.find(m => m.key === s.method).label + ' method)</div>';
+            if (rows.length === 0) {
+                html += '<div style="padding:20px;text-align:center;color:#888;">Nothing to order from this vendor for the selected settings.</div>';
+            } else {
+                html += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">' + plannerTableHead(false);
+                for (const r of rows) html += plannerTableRow(r, false);
+                html += '</table></div>';
             }
-            if (rows.length === 0) { alert('Nothing to order.'); return; }
-            const perKey = s.period === 'weekly' ? 'perWeek' : 'perMonth';
-            rows.sort((a, b) => (a.vendorNo || 'zzz').localeCompare(b.vendorNo || 'zzz') || b[perKey] - a[perKey]);
+            document.getElementById('plannerVendorContent').innerHTML = html;
+        }
+
+        // ---- CSV exports ----
+        function plannerBuildCSV(rows) {
+            const s = plannerState;
+            const perKey = plannerPerKey();
             const perLabel = s.period === 'weekly' ? 'Order Per Week' : 'Order Per Month';
             const lines = ['Vendor,Item No.,Description,Forecast ' + s.months + 'M,On Hand,On PO,On SO,Net To Order,' + perLabel];
             for (const r of rows) {
@@ -3933,12 +3973,32 @@
                 lines.push('"' + vend.replace(/"/g, '""') + '","' + r.itemNo.replace(/"/g, '""') + '","' + r.description.replace(/"/g, '""') + '",'
                     + Math.round(r.forecast) + ',' + Math.round(r.availInv) + ',' + Math.round(r.purchQty) + ',' + Math.round(r.salesQty) + ',' + Math.round(r.net) + ',' + r[perKey]);
             }
-            const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+            return lines.join('\n');
+        }
+        function plannerDownloadCSV(csv, name) {
+            const blob = new Blob([csv], { type: 'text/csv' });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = 'order-planner-' + s.period + '-' + s.months + 'm-' + s.method + '.csv';
+            a.download = name;
             a.click();
             URL.revokeObjectURL(a.href);
+        }
+        function plannerExportCSV() {
+            const s = plannerState;
+            const perKey = plannerPerKey();
+            const rows = plannerFilteredRows();
+            if (rows.length === 0) { alert('Nothing to order.'); return; }
+            rows.sort((a, b) => (a.vendorNo || 'zzz').localeCompare(b.vendorNo || 'zzz') || b[perKey] - a[perKey]);
+            plannerDownloadCSV(plannerBuildCSV(rows), 'order-planner-' + s.period + '-' + s.months + 'm-' + s.method + '.csv');
+        }
+        function plannerVendorExportCSV() {
+            const s = plannerState;
+            const perKey = plannerPerKey();
+            const rows = plannerVendorRows();
+            if (rows.length === 0) { alert('Nothing to order from this vendor.'); return; }
+            rows.sort((a, b) => b[perKey] - a[perKey]);
+            const tag = plannerVendorKey === '__none__' ? 'no-vendor' : plannerVendorKey;
+            plannerDownloadCSV(plannerBuildCSV(rows), 'order-planner-' + tag + '-' + s.period + '-' + s.months + 'm-' + s.method + '.csv');
         }
 
         function exportCSV() {
@@ -4164,6 +4224,8 @@
             if (e.key === 'Escape') {
                 if (document.getElementById('colMapModal').classList.contains('active')) {
                     cancelColumnMap();
+                } else if (document.getElementById('plannerVendorModal').classList.contains('active')) {
+                    closePlannerVendor();
                 } else if (document.getElementById('plannerModal').classList.contains('active')) {
                     closePlanner();
                 } else if (document.getElementById('detailModal').classList.contains('active')) {
