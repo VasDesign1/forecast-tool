@@ -265,6 +265,8 @@
         /* Toast notification system (BUG 1) */
         /* Order Planner sits above everything, including the import badges */
         #plannerModal { z-index: 10500; }
+        /* Item Detail too — otherwise the import badges cover its buttons in full screen */
+        #detailModal { z-index: 10400; }
         /* When the Container Planner is adopted into the vendor popup, the
            whole top block (title, methods, action buttons, forecast settings,
            CBM summary) is pinned — only the item table area scrolls. */
