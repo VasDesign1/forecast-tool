@@ -3767,13 +3767,13 @@
             document.body.style.overflow = '';
         }
         function setPlannerOpt(key, value) {
-            plannerState[key] = key === 'months' ? parseInt(value) : value;
+            plannerState[key] = key === 'months' ? parseFloat(value) : value;
             renderPlanner();
             if (document.getElementById('plannerVendorModal').classList.contains('active')) renderPlannerVendorDetail();
         }
         function setPlannerCustomMonths(v) {
-            const n = parseInt(v);
-            if (n >= 1 && n <= 60) setPlannerOpt('months', n);
+            const n = parseFloat(v);   // decimals welcome: 7.6, 10.3, ...
+            if (n >= 0.5 && n <= 60) setPlannerOpt('months', n);
         }
         function togglePlannerMax() {
             plannerState.maximized = !plannerState.maximized;
@@ -3808,7 +3808,7 @@
             }, 150);
         }
 
-        function plannerWeeks(months) { return Math.round(months * 52 / 12); }  // 13 / 26 / 52
+        function plannerWeeks(months) { return Math.max(1, Math.round(months * 52 / 12)); }  // 13 / 26 / 52; 7.6 → 33
         function plannerPerKey() { return plannerState.period === 'weekly' ? 'perWeek' : 'perMonth'; }
         function plannerPerLabel() { return plannerState.period === 'weekly' ? 'Order / Week' : 'Order / Month'; }
         function plannerVendorLabelOf(r) {
@@ -3910,9 +3910,9 @@
                 + plannerChip(months === 3, "setPlannerOpt('months','3')", '3M') + ' '
                 + plannerChip(months === 6, "setPlannerOpt('months','6')", '6M') + ' '
                 + plannerChip(months === 12, "setPlannerOpt('months','12')", '12M') + ' '
-                + '<input type="number" min="1" max="60" id="plannerCustomMonths" value="' + (isPreset ? '' : months) + '" placeholder="custom"'
+                + '<input type="number" min="0.5" max="60" step="0.1" id="plannerCustomMonths" value="' + (isPreset ? '' : months) + '" placeholder="e.g. 7.6"'
                 + ' onchange="setPlannerCustomMonths(this.value)"'
-                + ' style="width:64px;padding:6px 8px;border-radius:6px;font-size:12px;border:1px solid ' + (isPreset ? '#ccc' : '#1a237e') + ';' + (isPreset ? '' : 'background:#e8eaf6;font-weight:700;color:#1a237e;') + '">'
+                + ' style="width:95px;padding:6px 10px;border-radius:6px;font-size:12px;border:1px solid ' + (isPreset ? '#ccc' : '#1a237e') + ';' + (isPreset ? '' : 'background:#e8eaf6;font-weight:700;color:#1a237e;') + '">'
                 + ' <span style="color:#888;">months</span></span>';
             ch += '<span><strong style="color:#555;">Method:</strong> '
                 + PLANNER_METHODS.map(m => plannerChip(s.method === m.key, "setPlannerOpt('method','" + m.key + "')", m.label)).join(' ') + '</span>';
@@ -4037,6 +4037,16 @@
             const v = plannerVendorKey;
             return computePlannerRows().filter(r => (r.vendorNo || '__none__') === v);
         }
+        function plannerVendorHasCubage(v) {
+            for (const itemNo in vendorMapping) {
+                const vends = vendorMapping[itemNo];
+                if (!vends || vends[0] !== v) continue;
+                const u = uomData[itemNo] || uomData[String(itemNo).toUpperCase()];
+                if (!u) continue;
+                for (const k in u) { if (u[k] && u[k].c > 0) return true; }
+            }
+            return false;
+        }
         function renderPlannerVendorDetail() {
             const s = plannerState;
             const v = plannerVendorKey;
@@ -4049,8 +4059,10 @@
             document.getElementById('plannerVendorStats').innerHTML =
                 '<strong>' + rows.length + '</strong> items · <strong style="color:#e65100;">' + Math.round(subPer).toLocaleString() + '</strong> units ' + (s.period === 'weekly' ? 'per week' : 'per month')
                 + ' · <strong>' + Math.round(subNet).toLocaleString() + '</strong> net over ' + s.months + ' months (' + PLANNER_METHODS.find(m => m.key === s.method).label + ' method)';
+            // Container Planner only for container (overseas) vendors — i.e.
+            // vendors with at least one item carrying cubage (CBM) data.
             const btn = document.getElementById('plannerVendorContainerBtn');
-            if (btn) btn.style.display = v === '__none__' ? 'none' : 'inline-block';
+            if (btn) btn.style.display = (v !== '__none__' && plannerVendorHasCubage(v)) ? 'inline-block' : 'none';
             let html = '';
             if (rows.length === 0) {
                 html += '<div style="padding:20px;text-align:center;color:#888;">Nothing to order from this vendor for the selected settings.</div>';
