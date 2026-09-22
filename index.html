@@ -453,6 +453,7 @@
                 </select>
 
                 <button class="btn btn-outline export-btn" onclick="exportCSV()">Export CSV</button>
+                <button class="btn btn-primary" onclick="openOrderPlanner()" style="padding:8px 14px;background:#1a237e;color:white;border:none;border-radius:6px;cursor:pointer;">Order Planner</button>
             </div>
         </div>
 
@@ -570,6 +571,19 @@
                 <span style="cursor:pointer;font-size:22px;color:#999;" onclick="closeDetail()">&times;</span>
             </div>
             <div id="detailContent"></div>
+        </div>
+    </div>
+
+    <!-- Order Planner Modal -->
+    <div class="modal-overlay" id="plannerModal" onmousedown="this._mouseDownTarget=event.target" onmouseup="if(event.target===this&&this._mouseDownTarget===this)closePlanner()">
+        <div style="background:white;border-radius:12px;padding:30px;max-width:1150px;width:95%;max-height:88vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                <h2 style="color:#1a237e;font-size:18px;">Order Planner</h2>
+                <span style="cursor:pointer;font-size:22px;color:#999;" onclick="closePlanner()">&times;</span>
+            </div>
+            <div style="font-size:12px;color:#666;margin-bottom:14px;">How much to order to cover forecast demand — after subtracting stock on hand, incoming purchase orders and committed sales orders. Quantities are rounded up.</div>
+            <div id="plannerControls"></div>
+            <div id="plannerContent"></div>
         </div>
     </div>
 
@@ -3664,6 +3678,187 @@
             document.getElementById('detailModal').classList.remove('active');
         }
 
+        // ============================================================
+        // ORDER PLANNER — weekly/monthly ordering schedule per vendor/item.
+        // Always nets off current stock: need = forecast + on sales order
+        // − inventory − on purchase order (floored at 0). True calendar
+        // weeks: 3M = 13, 6M = 26, 12M = 52.
+        // ============================================================
+        const plannerState = { period: 'weekly', group: 'vendor', months: 6, method: 'standard' };
+        const PLANNER_METHODS = [
+            { key: 'standard', label: 'Standard' },
+            { key: 'wma', label: 'WMA' },
+            { key: 'linreg', label: 'Linear Regression' },
+            { key: 'holt', label: 'Exp. Smoothing' },
+            { key: 'seasonal', label: 'Seasonal' },
+        ];
+
+        function openOrderPlanner() {
+            if (allData.length === 0) { alert('Load data first.'); return; }
+            document.getElementById('plannerModal').classList.add('active');
+            renderPlanner();
+        }
+        function closePlanner() {
+            document.getElementById('plannerModal').classList.remove('active');
+        }
+        function setPlannerOpt(key, value) {
+            plannerState[key] = key === 'months' ? parseInt(value) : value;
+            renderPlanner();
+        }
+
+        function plannerWeeks(months) { return Math.round(months * 52 / 12); }  // 13 / 26 / 52
+
+        function computePlannerRows() {
+            const months = plannerState.months;
+            const weeks = plannerWeeks(months);
+            const rows = [];
+            for (const d of allData) {
+                const dv = getDisplayValues(d, plannerState.method);
+                let forecast = dv['forecast_' + months + 'm'];
+                if (forecast == null) forecast = Math.ceil((dv.monthly_avg || 0) * months);
+                if (!forecast || forecast <= 0) continue;
+                const od = orderData[d.item_no] || { salesQty: 0, purchQty: 0, availInv: 0 };
+                const net = Math.max(0, forecast + od.salesQty - od.availInv - od.purchQty);
+                if (net <= 0) continue;
+                const vendors = vendorMapping[d.item_no] || [];
+                rows.push({
+                    itemNo: d.item_no,
+                    description: d.description || '',
+                    vendorNo: vendors[0] || '',
+                    forecast: forecast,
+                    availInv: od.availInv,
+                    purchQty: od.purchQty,
+                    salesQty: od.salesQty,
+                    net: net,
+                    perWeek: Math.ceil(net / weeks),
+                    perMonth: Math.ceil(net / months),
+                });
+            }
+            return rows;
+        }
+
+        function plannerChip(active, onclick, label) {
+            const style = active
+                ? 'background:#1a237e;color:white;border:1px solid #1a237e;'
+                : 'background:white;color:#444;border:1px solid #ccc;';
+            return '<button type="button" style="' + style + 'padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;" onclick="' + onclick + '">' + label + '</button>';
+        }
+
+        function renderPlanner() {
+            const s = plannerState;
+            const months = s.months;
+            const weeks = plannerWeeks(months);
+            const perLabel = s.period === 'weekly' ? 'Order / Week' : 'Order / Month';
+            const perKey = s.period === 'weekly' ? 'perWeek' : 'perMonth';
+
+            // Controls
+            let ch = '<div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin-bottom:14px;font-size:12px;">';
+            ch += '<span><strong style="color:#555;">Period:</strong> '
+                + plannerChip(s.period === 'weekly', "setPlannerOpt('period','weekly')", 'Weekly') + ' '
+                + plannerChip(s.period === 'monthly', "setPlannerOpt('period','monthly')", 'Monthly') + '</span>';
+            ch += '<span><strong style="color:#555;">Group by:</strong> '
+                + plannerChip(s.group === 'vendor', "setPlannerOpt('group','vendor')", 'Vendor') + ' '
+                + plannerChip(s.group === 'item', "setPlannerOpt('group','item')", 'Item') + '</span>';
+            ch += '<span><strong style="color:#555;">Horizon:</strong> '
+                + plannerChip(months === 3, "setPlannerOpt('months','3')", '3M') + ' '
+                + plannerChip(months === 6, "setPlannerOpt('months','6')", '6M') + ' '
+                + plannerChip(months === 12, "setPlannerOpt('months','12')", '12M') + '</span>';
+            ch += '<span><strong style="color:#555;">Method:</strong> '
+                + PLANNER_METHODS.map(m => plannerChip(s.method === m.key, "setPlannerOpt('method','" + m.key + "')", m.label)).join(' ') + '</span>';
+            ch += '<button type="button" class="btn btn-outline" style="padding:6px 12px;font-size:12px;" onclick="plannerExportCSV()">Export CSV</button>';
+            ch += '</div>';
+            document.getElementById('plannerControls').innerHTML = ch;
+
+            const rows = computePlannerRows();
+            const totalNet = rows.reduce((a, r) => a + r.net, 0);
+            const totalPer = rows.reduce((a, r) => a + r[perKey], 0);
+
+            let html = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;">';
+            html += '<div style="background:#e8eaf6;padding:10px 16px;border-radius:8px;text-align:center;"><div style="font-size:18px;font-weight:700;color:#1a237e;">' + rows.length.toLocaleString() + '</div><div style="font-size:10px;color:#666;">Items to Order</div></div>';
+            html += '<div style="background:#e8f5e9;padding:10px 16px;border-radius:8px;text-align:center;"><div style="font-size:18px;font-weight:700;color:#2e7d32;">' + Math.round(totalNet).toLocaleString() + '</div><div style="font-size:10px;color:#666;">Net Units over ' + months + 'M</div></div>';
+            html += '<div style="background:#fff3e0;padding:10px 16px;border-radius:8px;text-align:center;"><div style="font-size:18px;font-weight:700;color:#e65100;">' + Math.round(totalPer).toLocaleString() + '</div><div style="font-size:10px;color:#666;">Units ' + (s.period === 'weekly' ? 'per Week (' + weeks + ' weeks)' : 'per Month') + '</div></div>';
+            html += '</div>';
+
+            const thS = 'background:#e8eaf6;padding:8px 10px;color:#1a237e;font-weight:600;font-size:11px;text-align:right;position:sticky;top:0;';
+            const thL = thS + 'text-align:left;';
+            const td = 'padding:5px 10px;border-bottom:1px solid #eee;font-size:12px;';
+            const tdR = td + 'text-align:right;';
+
+            function tableHead(withVendor) {
+                let h = '<tr><th style="' + thL + '">Item</th><th style="' + thL + '">Description</th>';
+                if (withVendor) h += '<th style="' + thL + '">Vendor</th>';
+                h += '<th style="' + thS + '">Forecast ' + months + 'M</th><th style="' + thS + '">On Hand</th><th style="' + thS + '">On PO</th><th style="' + thS + '">On SO</th><th style="' + thS + '">Net to Order</th><th style="' + thS + 'color:#e65100;">' + perLabel + '</th></tr>';
+                return h;
+            }
+            function tableRow(r, withVendor) {
+                let h = '<tr><td style="' + td + 'font-weight:600;">' + esc(r.itemNo) + '</td><td style="' + td + '">' + esc(r.description) + '</td>';
+                if (withVendor) h += '<td style="' + td + '">' + esc(r.vendorNo ? vendorDisplayLabel(r.vendorNo) : '-') + '</td>';
+                h += '<td style="' + tdR + '">' + Math.round(r.forecast).toLocaleString() + '</td>'
+                   + '<td style="' + tdR + '">' + Math.round(r.availInv).toLocaleString() + '</td>'
+                   + '<td style="' + tdR + '">' + Math.round(r.purchQty).toLocaleString() + '</td>'
+                   + '<td style="' + tdR + '">' + Math.round(r.salesQty).toLocaleString() + '</td>'
+                   + '<td style="' + tdR + 'font-weight:600;">' + Math.round(r.net).toLocaleString() + '</td>'
+                   + '<td style="' + tdR + 'font-weight:700;color:#e65100;">' + r[perKey].toLocaleString() + '</td></tr>';
+                return h;
+            }
+
+            if (rows.length === 0) {
+                html += '<div style="padding:30px;text-align:center;color:#888;">Nothing to order — current stock and incoming purchase orders cover the ' + months + '-month forecast for every item.</div>';
+            } else if (s.group === 'item') {
+                rows.sort((a, b) => b[perKey] - a[perKey]);
+                html += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">' + tableHead(true);
+                for (const r of rows) html += tableRow(r, true);
+                html += '</table></div>';
+            } else {
+                // Group by vendor
+                const byVendor = {};
+                for (const r of rows) {
+                    const v = r.vendorNo || '__none__';
+                    (byVendor[v] = byVendor[v] || []).push(r);
+                }
+                const vendorKeys = Object.keys(byVendor).sort((a, b) => {
+                    const sub = k => byVendor[k].reduce((x, r) => x + r[perKey], 0);
+                    return sub(b) - sub(a);
+                });
+                for (const v of vendorKeys) {
+                    const vRows = byVendor[v];
+                    vRows.sort((a, b) => b[perKey] - a[perKey]);
+                    const subPer = vRows.reduce((x, r) => x + r[perKey], 0);
+                    const subNet = vRows.reduce((x, r) => x + r.net, 0);
+                    const label = v === '__none__' ? 'No vendor assigned' : vendorDisplayLabel(v);
+                    html += '<div style="margin-bottom:18px;">';
+                    html += '<div style="background:#1a237e;color:white;padding:8px 12px;border-radius:8px 8px 0 0;font-size:13px;font-weight:600;display:flex;justify-content:space-between;">'
+                          + '<span>' + esc(label) + ' <span style="opacity:0.7;font-weight:400;">(' + vRows.length + ' items)</span></span>'
+                          + '<span>' + Math.round(subPer).toLocaleString() + ' units ' + (s.period === 'weekly' ? '/ week' : '/ month') + ' · ' + Math.round(subNet).toLocaleString() + ' net over ' + months + 'M</span></div>';
+                    html += '<div style="overflow-x:auto;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 8px 8px;"><table style="width:100%;border-collapse:collapse;">' + tableHead(false);
+                    for (const r of vRows) html += tableRow(r, false);
+                    html += '</table></div></div>';
+                }
+            }
+            document.getElementById('plannerContent').innerHTML = html;
+        }
+
+        function plannerExportCSV() {
+            const s = plannerState;
+            const rows = computePlannerRows();
+            if (rows.length === 0) { alert('Nothing to order.'); return; }
+            const perKey = s.period === 'weekly' ? 'perWeek' : 'perMonth';
+            rows.sort((a, b) => (a.vendorNo || 'zzz').localeCompare(b.vendorNo || 'zzz') || b[perKey] - a[perKey]);
+            const perLabel = s.period === 'weekly' ? 'Order Per Week' : 'Order Per Month';
+            const lines = ['Vendor,Item No.,Description,Forecast ' + s.months + 'M,On Hand,On PO,On SO,Net To Order,' + perLabel];
+            for (const r of rows) {
+                const vend = r.vendorNo ? vendorDisplayLabel(r.vendorNo) : 'No vendor';
+                lines.push('"' + vend.replace(/"/g, '""') + '","' + r.itemNo.replace(/"/g, '""') + '","' + r.description.replace(/"/g, '""') + '",'
+                    + Math.round(r.forecast) + ',' + Math.round(r.availInv) + ',' + Math.round(r.purchQty) + ',' + Math.round(r.salesQty) + ',' + Math.round(r.net) + ',' + r[perKey]);
+            }
+            const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'order-planner-' + s.period + '-' + s.months + 'm-' + s.method + '.csv';
+            a.click();
+            URL.revokeObjectURL(a.href);
+        }
+
         function exportCSV() {
             if (filteredData.length === 0) return;
             const locs = selectedLocations;
@@ -3887,6 +4082,8 @@
             if (e.key === 'Escape') {
                 if (document.getElementById('colMapModal').classList.contains('active')) {
                     cancelColumnMap();
+                } else if (document.getElementById('plannerModal').classList.contains('active')) {
+                    closePlanner();
                 } else if (document.getElementById('detailModal').classList.contains('active')) {
                     closeDetail();
                 }
