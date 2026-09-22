@@ -580,31 +580,45 @@
 
     <!-- Order Planner Modal -->
     <div class="modal-overlay" id="plannerModal" onmousedown="this._mouseDownTarget=event.target" onmouseup="if(event.target===this&&this._mouseDownTarget===this)closePlanner()">
-        <div id="plannerCard" style="background:white;border-radius:12px;padding:30px;max-width:1150px;width:95%;max-height:88vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,0.3);">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                <h2 style="color:#1a237e;font-size:18px;">Order Planner</h2>
-                <span style="display:flex;gap:14px;align-items:center;">
-                    <button type="button" id="plannerMaxBtn" onclick="togglePlannerMax()" style="background:white;border:1px solid #ccc;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;color:#444;">&#x26F6; Full screen</button>
-                    <span style="cursor:pointer;font-size:22px;color:#999;" onclick="closePlanner()">&times;</span>
-                </span>
+        <div id="plannerCard" style="background:white;border-radius:12px;padding:0;max-width:1250px;width:95%;height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+            <!-- Pinned head: title, controls and summary never scroll -->
+            <div style="padding:22px 30px 0;border-bottom:1px solid #eee;flex-shrink:0;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                    <h2 style="color:#1a237e;font-size:18px;">Order Planner</h2>
+                    <span style="display:flex;gap:14px;align-items:center;">
+                        <button type="button" id="plannerMaxBtn" onclick="togglePlannerMax()" style="background:white;border:1px solid #ccc;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;color:#444;">&#x26F6; Full screen</button>
+                        <span style="cursor:pointer;font-size:22px;color:#999;" onclick="closePlanner()">&times;</span>
+                    </span>
+                </div>
+                <div style="font-size:12px;color:#666;margin-bottom:12px;">How much to order to cover forecast demand — after subtracting stock on hand, incoming purchase orders and committed sales orders. Quantities are rounded up.</div>
+                <div id="plannerControls"></div>
+                <div id="plannerSummary"></div>
             </div>
-            <div style="font-size:12px;color:#666;margin-bottom:14px;">How much to order to cover forecast demand — after subtracting stock on hand, incoming purchase orders and committed sales orders. Quantities are rounded up.</div>
-            <div id="plannerControls"></div>
-            <div id="plannerContent"></div>
+            <div id="plannerScroll" style="flex:1;overflow-y:auto;padding:14px 30px 24px;">
+                <div id="plannerContent"></div>
+            </div>
         </div>
     </div>
 
     <!-- Order Planner: single-vendor drill-down popup -->
     <div class="modal-overlay" id="plannerVendorModal" style="z-index:10600;" onmousedown="this._mouseDownTarget=event.target" onmouseup="if(event.target===this&&this._mouseDownTarget===this)closePlannerVendor()">
-        <div style="background:white;border-radius:12px;padding:26px;max-width:1000px;width:92%;max-height:85vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,0.35);">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:12px;">
-                <h2 style="color:#1a237e;font-size:16px;" id="plannerVendorTitle">Vendor</h2>
-                <span style="display:flex;gap:12px;align-items:center;">
-                    <button type="button" class="btn btn-outline" style="padding:5px 12px;font-size:12px;" onclick="plannerVendorExportCSV()">Export CSV</button>
-                    <span style="cursor:pointer;font-size:22px;color:#999;" onclick="closePlannerVendor()">&times;</span>
-                </span>
+        <div style="background:white;border-radius:12px;padding:0;max-width:1500px;width:96vw;height:92vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,0.35);">
+            <!-- Pinned head: vendor title, stats and buttons never scroll -->
+            <div style="padding:18px 26px 12px;border-bottom:1px solid #eee;flex-shrink:0;">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+                    <h2 style="color:#1a237e;font-size:17px;" id="plannerVendorTitle">Vendor</h2>
+                    <span style="display:flex;gap:10px;align-items:center;">
+                        <button type="button" id="plannerVendorContainerBtn" class="btn btn-outline" style="padding:5px 12px;font-size:12px;color:#7b1fa2;border-color:#7b1fa2;" onclick="toggleVendorContainerPlanner()">Container Planner</button>
+                        <button type="button" class="btn btn-outline" style="padding:5px 12px;font-size:12px;" onclick="plannerVendorExportCSV()">Export CSV</button>
+                        <span style="cursor:pointer;font-size:22px;color:#999;" onclick="closePlannerVendor()">&times;</span>
+                    </span>
+                </div>
+                <div id="plannerVendorStats" style="font-size:12px;color:#555;margin-top:6px;"></div>
             </div>
-            <div id="plannerVendorContent"></div>
+            <div id="plannerVendorScroll" style="flex:1;overflow-y:auto;padding:12px 26px 20px;">
+                <div id="plannerVendorContent"></div>
+                <div id="plannerVendorContainerHost" style="display:none;"></div>
+            </div>
         </div>
     </div>
 
@@ -3704,12 +3718,18 @@
         // Always nets off current stock: need = forecast + on sales order
         // − inventory − on purchase order (floored at 0). True calendar
         // weeks: 13 / 26 / 52 (custom months → round(m × 52/12)).
-        // Vendor view = compact tiles, easy on the eye; clicking a tile
-        // opens that vendor's full schedule in its own popup.
+        // Vendor view = compact tiles; clicking a tile opens that vendor's
+        // full schedule in its own popup, which can also host the main
+        // page's Container Planner (the real section is adopted into the
+        // popup and returned on close, so every container button works).
         // ============================================================
         const plannerState = { period: 'weekly', group: 'vendor', months: 6, method: 'standard', search: '', maximized: false };
         let plannerSearchTimer = null;
-        let plannerVendorKey = null;   // vendor open in the drill-down popup
+        let plannerVendorKey = null;       // vendor open in the drill-down popup
+        let plannerSort = { key: 'per', dir: 'desc' };
+        let plannerContainerHome = null;   // where #containerSection normally lives
+        let plannerPrevVendorFilter = null;
+        let plannerVendorShowingContainer = false;
         const PLANNER_METHODS = [
             { key: 'standard', label: 'Standard' },
             { key: 'wma', label: 'WMA' },
@@ -3717,17 +3737,21 @@
             { key: 'holt', label: 'Exp. Smoothing' },
             { key: 'seasonal', label: 'Seasonal' },
         ];
-        const PLANNER_CARD_BASE = 'background:white;border-radius:12px;padding:30px;max-width:1150px;width:95%;max-height:88vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,0.3);';
-        const PLANNER_CARD_MAX = 'background:white;border-radius:0;padding:30px;max-width:100vw;width:100vw;height:100vh;max-height:100vh;overflow-y:auto;';
+        const PLANNER_TEXT_COLS = { itemNo: true, description: true, vendorNo: true };
+        const PLANNER_CARD_BASE = 'background:white;border-radius:12px;padding:0;max-width:1250px;width:95%;height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,0.3);';
+        const PLANNER_CARD_MAX = 'background:white;border-radius:0;padding:0;max-width:100vw;width:100vw;height:100vh;max-height:100vh;display:flex;flex-direction:column;overflow:hidden;';
 
         function openOrderPlanner() {
             if (allData.length === 0) { alert('Load data first.'); return; }
             document.getElementById('plannerModal').classList.add('active');
+            document.body.style.overflow = 'hidden';   // freeze the page behind
             applyPlannerSize();
             renderPlanner();
         }
         function closePlanner() {
+            closePlannerVendor();
             document.getElementById('plannerModal').classList.remove('active');
+            document.body.style.overflow = '';
         }
         function setPlannerOpt(key, value) {
             plannerState[key] = key === 'months' ? parseInt(value) : value;
@@ -3807,6 +3831,28 @@
                 || r.description.toLowerCase().indexOf(q) !== -1);
         }
 
+        // ---- Column sorting (item view + vendor popup share the state) ----
+        function plannerSortBy(key) {
+            if (plannerSort.key === key) {
+                plannerSort.dir = plannerSort.dir === 'asc' ? 'desc' : 'asc';
+            } else {
+                plannerSort = { key: key, dir: PLANNER_TEXT_COLS[key] ? 'asc' : 'desc' };
+            }
+            renderPlannerContent();
+            if (document.getElementById('plannerVendorModal').classList.contains('active')) renderPlannerVendorDetail();
+        }
+        function plannerSortRows(rows) {
+            const key = plannerSort.key;
+            const dir = plannerSort.dir === 'asc' ? 1 : -1;
+            const val = key === 'per' ? (r) => r[plannerPerKey()] : (r) => r[key];
+            if (PLANNER_TEXT_COLS[key]) {
+                rows.sort((a, b) => dir * String(val(a)).localeCompare(String(val(b))));
+            } else {
+                rows.sort((a, b) => dir * ((val(a) || 0) - (val(b) || 0)));
+            }
+            return rows;
+        }
+
         function plannerChip(active, onclick, label) {
             const style = active
                 ? 'background:#1a237e;color:white;border:1px solid #1a237e;'
@@ -3842,7 +3888,7 @@
                 + PLANNER_METHODS.map(m => plannerChip(s.method === m.key, "setPlannerOpt('method','" + m.key + "')", m.label)).join(' ') + '</span>';
             ch += '<button type="button" class="btn btn-outline" style="padding:6px 12px;font-size:12px;" onclick="plannerExportCSV()">Export CSV</button>';
             ch += '</div>';
-            ch += '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px;font-size:12px;">';
+            ch += '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:12px;font-size:12px;">';
             ch += '<input type="text" id="plannerSearch" placeholder="' + (s.group === 'vendor' ? 'Search vendors...' : 'Search item no. or description...') + '" value="' + escAttr(s.search) + '" oninput="plannerSearchInput(this.value)"'
                 + ' style="flex:1;min-width:220px;max-width:420px;padding:7px 12px;border:1px solid #ccc;border-radius:6px;font-size:12px;">';
             ch += '</div>';
@@ -3853,10 +3899,26 @@
         function plannerTableHead(withVendor) {
             const thS = 'background:#e8eaf6;padding:8px 10px;color:#1a237e;font-weight:600;font-size:11px;text-align:right;position:sticky;top:0;';
             const thL = thS + 'text-align:left;';
-            let h = '<tr><th style="' + thL + '">Item</th><th style="' + thL + '">Description</th>';
-            if (withVendor) h += '<th style="' + thL + '">Vendor</th>';
-            h += '<th style="' + thS + '">Forecast ' + plannerState.months + 'M</th><th style="' + thS + '">On Hand</th><th style="' + thS + '">On PO</th><th style="' + thS + '">On SO</th><th style="' + thS + '">Net to Order</th><th style="' + thS + 'color:#e65100;">' + plannerPerLabel() + '</th></tr>';
-            return h;
+            const cols = [
+                { key: 'itemNo', label: 'Item', style: thL },
+                { key: 'description', label: 'Description', style: thL },
+            ];
+            if (withVendor) cols.push({ key: 'vendorNo', label: 'Vendor', style: thL });
+            cols.push(
+                { key: 'forecast', label: 'Forecast ' + plannerState.months + 'M', style: thS },
+                { key: 'availInv', label: 'On Hand', style: thS },
+                { key: 'purchQty', label: 'On PO', style: thS },
+                { key: 'salesQty', label: 'On SO', style: thS },
+                { key: 'net', label: 'Net to Order', style: thS },
+                { key: 'per', label: plannerPerLabel(), style: thS + 'color:#e65100;' },
+            );
+            let h = '<tr>';
+            for (const c of cols) {
+                let cls = 'sortable';
+                if (plannerSort.key === c.key) cls += plannerSort.dir === 'asc' ? ' sorted-asc' : ' sorted-desc';
+                h += '<th class="' + cls + '" style="' + c.style + '" onclick="plannerSortBy(\'' + c.key + '\')">' + c.label + '</th>';
+            }
+            return h + '</tr>';
         }
         function plannerTableRow(r, withVendor) {
             const td = 'padding:5px 10px;border-bottom:1px solid #eee;font-size:12px;';
@@ -3882,18 +3944,21 @@
             const totalNet = rows.reduce((a, r) => a + r.net, 0);
             const totalPer = rows.reduce((a, r) => a + r[perKey], 0);
 
-            let html = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;">';
-            html += '<div style="background:#e8eaf6;padding:10px 16px;border-radius:8px;text-align:center;"><div style="font-size:18px;font-weight:700;color:#1a237e;">' + rows.length.toLocaleString() + '</div><div style="font-size:10px;color:#666;">Items to Order</div></div>';
-            html += '<div style="background:#e8f5e9;padding:10px 16px;border-radius:8px;text-align:center;"><div style="font-size:18px;font-weight:700;color:#2e7d32;">' + Math.round(totalNet).toLocaleString() + '</div><div style="font-size:10px;color:#666;">Net Units over ' + months + 'M</div></div>';
-            html += '<div style="background:#fff3e0;padding:10px 16px;border-radius:8px;text-align:center;"><div style="font-size:18px;font-weight:700;color:#e65100;">' + Math.round(totalPer).toLocaleString() + '</div><div style="font-size:10px;color:#666;">Units ' + (s.period === 'weekly' ? 'per Week (' + weeks + ' weeks)' : 'per Month') + '</div></div>';
-            html += '</div>';
+            // Summary tiles live in the pinned head, above the scroll area.
+            let sm = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;">';
+            sm += '<div style="background:#e8eaf6;padding:8px 16px;border-radius:8px;text-align:center;"><div style="font-size:17px;font-weight:700;color:#1a237e;">' + rows.length.toLocaleString() + '</div><div style="font-size:10px;color:#666;">Items to Order</div></div>';
+            sm += '<div style="background:#e8f5e9;padding:8px 16px;border-radius:8px;text-align:center;"><div style="font-size:17px;font-weight:700;color:#2e7d32;">' + Math.round(totalNet).toLocaleString() + '</div><div style="font-size:10px;color:#666;">Net Units over ' + months + 'M</div></div>';
+            sm += '<div style="background:#fff3e0;padding:8px 16px;border-radius:8px;text-align:center;"><div style="font-size:17px;font-weight:700;color:#e65100;">' + Math.round(totalPer).toLocaleString() + '</div><div style="font-size:10px;color:#666;">Units ' + (s.period === 'weekly' ? 'per Week (' + weeks + ' weeks)' : 'per Month') + '</div></div>';
+            sm += '</div>';
+            document.getElementById('plannerSummary').innerHTML = sm;
 
+            let html = '';
             if (rows.length === 0) {
                 html += '<div style="padding:30px;text-align:center;color:#888;">' + (q
                     ? 'No ' + (s.group === 'vendor' ? 'vendors' : 'items') + ' match "' + esc(q) + '".'
                     : 'Nothing to order — current stock and incoming purchase orders cover the ' + months + '-month forecast for every item.') + '</div>';
             } else if (s.group === 'item') {
-                rows.sort((a, b) => b[perKey] - a[perKey]);
+                plannerSortRows(rows);
                 html += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">' + plannerTableHead(true);
                 for (const r of rows) html += plannerTableRow(r, true);
                 html += '</table></div>';
@@ -3929,10 +3994,12 @@
         // ---- Single-vendor drill-down popup ----
         function openPlannerVendor(encKey) {
             plannerVendorKey = decodeURIComponent(encKey);
+            hideVendorContainerPlanner();
             renderPlannerVendorDetail();
             document.getElementById('plannerVendorModal').classList.add('active');
         }
         function closePlannerVendor() {
+            hideVendorContainerPlanner();
             document.getElementById('plannerVendorModal').classList.remove('active');
         }
         function plannerVendorRows() {
@@ -3943,15 +4010,17 @@
             const s = plannerState;
             const v = plannerVendorKey;
             const perKey = plannerPerKey();
-            const rows = plannerVendorRows();
-            rows.sort((a, b) => b[perKey] - a[perKey]);
+            const rows = plannerSortRows(plannerVendorRows());
             const subPer = rows.reduce((x, r) => x + r[perKey], 0);
             const subNet = rows.reduce((x, r) => x + r.net, 0);
             const label = v === '__none__' ? 'No vendor assigned' : vendorDisplayLabel(v);
             document.getElementById('plannerVendorTitle').textContent = label;
-            let html = '<div style="font-size:12px;color:#555;margin-bottom:12px;">'
-                + '<strong>' + rows.length + '</strong> items · <strong style="color:#e65100;">' + Math.round(subPer).toLocaleString() + '</strong> units ' + (s.period === 'weekly' ? 'per week' : 'per month')
-                + ' · <strong>' + Math.round(subNet).toLocaleString() + '</strong> net over ' + s.months + ' months (' + PLANNER_METHODS.find(m => m.key === s.method).label + ' method)</div>';
+            document.getElementById('plannerVendorStats').innerHTML =
+                '<strong>' + rows.length + '</strong> items · <strong style="color:#e65100;">' + Math.round(subPer).toLocaleString() + '</strong> units ' + (s.period === 'weekly' ? 'per week' : 'per month')
+                + ' · <strong>' + Math.round(subNet).toLocaleString() + '</strong> net over ' + s.months + ' months (' + PLANNER_METHODS.find(m => m.key === s.method).label + ' method)';
+            const btn = document.getElementById('plannerVendorContainerBtn');
+            if (btn) btn.style.display = v === '__none__' ? 'none' : 'inline-block';
+            let html = '';
             if (rows.length === 0) {
                 html += '<div style="padding:20px;text-align:center;color:#888;">Nothing to order from this vendor for the selected settings.</div>';
             } else {
@@ -3960,6 +4029,49 @@
                 html += '</table></div>';
             }
             document.getElementById('plannerVendorContent').innerHTML = html;
+        }
+
+        // ---- Container Planner inside the vendor popup ----
+        // We ADOPT the main page's real #containerSection (move the DOM node
+        // into the popup) after pointing the main vendor filter at this
+        // vendor — so Optimize Containers, Predicted Forecast, Reset and
+        // both Excel exports are the genuine article, not a copy. On leave,
+        // the section goes back home and the previous filter is restored.
+        function toggleVendorContainerPlanner() {
+            if (plannerVendorShowingContainer) {
+                hideVendorContainerPlanner();
+                renderPlannerVendorDetail();
+                return;
+            }
+            if (!plannerVendorKey || plannerVendorKey === '__none__') return;
+            const section = document.getElementById('containerSection');
+            if (!plannerContainerHome) {
+                plannerContainerHome = { parent: section.parentNode, next: section.nextSibling };
+            }
+            plannerPrevVendorFilter = selectedVendor;
+            selectVendor(plannerVendorKey);   // filters main data → container plan builds for this vendor
+            document.getElementById('plannerVendorContainerHost').appendChild(section);
+            document.getElementById('plannerVendorContainerHost').style.display = 'block';
+            document.getElementById('plannerVendorContent').style.display = 'none';
+            plannerVendorShowingContainer = true;
+            const btn = document.getElementById('plannerVendorContainerBtn');
+            if (btn) btn.textContent = 'Back to Ordering Schedule';
+        }
+        function hideVendorContainerPlanner() {
+            if (!plannerVendorShowingContainer) return;
+            const section = document.getElementById('containerSection');
+            if (plannerContainerHome && plannerContainerHome.parent) {
+                plannerContainerHome.parent.insertBefore(section, plannerContainerHome.next);
+            }
+            document.getElementById('plannerVendorContainerHost').style.display = 'none';
+            document.getElementById('plannerVendorContent').style.display = '';
+            plannerVendorShowingContainer = false;
+            if (plannerPrevVendorFilter !== null && plannerPrevVendorFilter !== selectedVendor) {
+                selectVendor(plannerPrevVendorFilter);
+            }
+            plannerPrevVendorFilter = null;
+            const btn = document.getElementById('plannerVendorContainerBtn');
+            if (btn) btn.textContent = 'Container Planner';
         }
 
         // ---- CSV exports ----
@@ -3993,10 +4105,8 @@
         }
         function plannerVendorExportCSV() {
             const s = plannerState;
-            const perKey = plannerPerKey();
-            const rows = plannerVendorRows();
+            const rows = plannerSortRows(plannerVendorRows());
             if (rows.length === 0) { alert('Nothing to order from this vendor.'); return; }
-            rows.sort((a, b) => b[perKey] - a[perKey]);
             const tag = plannerVendorKey === '__none__' ? 'no-vendor' : plannerVendorKey;
             plannerDownloadCSV(plannerBuildCSV(rows), 'order-planner-' + tag + '-' + s.period + '-' + s.months + 'm-' + s.method + '.csv');
         }
