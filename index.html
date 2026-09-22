@@ -4048,24 +4048,13 @@
             const v = plannerVendorKey;
             return computePlannerRows().filter(r => (r.vendorNo || '__none__') === v);
         }
-        // Overseas / container vendors — the only ones that get the Container
-        // Planner button in the vendor popup. Derived from cubage coverage in
-        // the UOM table (vendors whose range is genuinely containered), NOT
-        // from the odd stray cubage item (e.g. RapidFlow has 3 of 151).
-        // Edit this list to add or remove a vendor.
-        const CONTAINER_VENDORS = new Set([
-            '2124',  // Grandaire
-            '2457',  // TAIHE GROUP
-            '2123',  // LEADER HVAC EQUIPMENT TRADING CO. (HK)
-            '2376',  // ICOOL PACIFIC
-            '2345',  // iZone
-            '2410',  // Air Conditioning Direct
-            '2153',  // GUANGZHOU JZ.FOREVER TRADE CO.
-            '2167',  // Xiamen UNT Duct Technology
-            '2367',  // Shenzhen Hongguan Mechatronics
-        ]);
+        // Mirrors the MAIN PAGE's container-planning behaviour exactly: the
+        // main page shows Container Planning for whichever vendor is filtered
+        // (no vendor list), so the popup button shows for every real vendor
+        // too. To restrict to a hand-picked overseas list instead, replace
+        // the body with a Set membership check.
         function plannerVendorHasCubage(v) {
-            return CONTAINER_VENDORS.has(String(v));
+            return v !== '__none__';
         }
         function renderPlannerVendorDetail() {
             const s = plannerState;
