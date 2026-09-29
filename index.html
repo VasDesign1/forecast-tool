@@ -135,7 +135,7 @@
         th.col-group[data-g="stock"] { background: #6a1b9a; }
         th.col-group[data-g="net"] { background: #e65100; }
         th.col-group:hover { filter: brightness(1.15); }
-        tr.col-sub th { top: 29px; }   /* second header row sticks below the group bar */
+        tr.col-sub th { top: 27px; }   /* sticks below the 28px group bar, overlapping 1px so no slit shows content behind */
         tr.col-sub th[data-g="usage"] { background: #e0f2f1; color: #00695c; }
         tr.col-sub th[data-g="forecast"] { background: #e3f2fd; color: #1565c0; }
         tr.col-sub th[data-g="stock"] { background: #f3e5f5; color: #6a1b9a; }
@@ -3267,6 +3267,10 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 const o = orderToMin(getScopedOrderData(item.item_no), getSkuMinMax(item.item_no));
                 return o ? o.buy : -1;
             }
+            if (col === 'sku_mult') {
+                const mm = getSkuMinMax(item.item_no);
+                return mm && mm.mult > 1 ? mm.mult : -1;
+            }
             if (col.startsWith('net_')) {
                 const dv = getDisplayValues(item);
                 const od = getScopedOrderData(item.item_no);
@@ -3353,7 +3357,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
 
         // ---- Table extras: six independent toggles, remembered per device ----
         // Gauge + Status always start ON (Faik's rule) — no localStorage read here.
-        let tableExtras = { gauge: true, status: true, minorder: false };
+        let tableExtras = { gauge: true, status: true, minorder: false, roundup: false };
         function toggleTableExtra(k) {
             tableExtras[k] = !tableExtras[k];
             try { localStorage.setItem('forecastTableExtras', JSON.stringify(tableExtras)); } catch (e) {}
@@ -3405,6 +3409,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             if (extrasChips) {
                 extrasChips.innerHTML = plannerChip(!!tableExtras.minorder, "toggleTableExtra('minorder')", 'Order to Min')
                     + '<span style="display:inline-block;width:18px;"></span>'
+                    + plannerChip(!!tableExtras.roundup, "toggleTableExtra('roundup')", 'Round up') + ' '
                     + plannerChip(!!tableExtras.gauge, "toggleTableExtra('gauge')", 'Stock gauge') + ' '
                     + plannerChip(!!tableExtras.status, "toggleTableExtra('status')", 'Status');
             }
@@ -3431,6 +3436,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 if (tableExtras.minorder) {
                     groups.push({ id: 'net', label: 'Net to Purchase (to Min)' + locLabel, summary: 'net_min', cols: [
                         { key: 'net_min', label: 'Order Qty' },
+                        { key: 'sku_mult', label: 'Multiple' },
                     ]});
                 } else {
                     groups.push({ id: 'net', label: 'Net to Purchase' + locLabel, summary: 'net_6m', cols: [
@@ -3488,16 +3494,18 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 tbody.innerHTML = '<tr><td colspan="' + totalVisible + '" style="text-align:center;padding:30px;color:#999;">No matching items</td></tr>';
             } else {
                 let html = '';
+                // "Round up" mode: every usage/forecast figure ceils to the next whole unit
+                const F = tableExtras.roundup ? fmtCeil : fmt;
                 for (const r of rowsData) {
                     const item = r.item, dv = r.dv, od = r.od, mm = r.mm;
                     const st = tableExtras.status ? healthOf(r) : null;
                     const cell = (key) => {
                         switch (key) {
-                            case 'total_usage_12m': return '<td>' + fmt(dv.total_usage_12m) + '</td>';
-                            case 'monthly_avg': return '<td>' + fmt(dv.monthly_avg) + '</td>';
-                            case 'forecast_3m': return '<td class="forecast-val fc-3m">' + fmt(dv.forecast_3m) + '</td>';
-                            case 'forecast_6m': return '<td class="forecast-val fc-6m">' + fmt(dv.forecast_6m) + '</td>';
-                            case 'forecast_12m': return '<td class="forecast-val fc-12m">' + fmt(dv.forecast_12m) + '</td>';
+                            case 'total_usage_12m': return '<td>' + F(dv.total_usage_12m) + '</td>';
+                            case 'monthly_avg': return '<td>' + F(dv.monthly_avg) + '</td>';
+                            case 'forecast_3m': return '<td class="forecast-val fc-3m">' + F(dv.forecast_3m) + '</td>';
+                            case 'forecast_6m': return '<td class="forecast-val fc-6m">' + F(dv.forecast_6m) + '</td>';
+                            case 'forecast_12m': return '<td class="forecast-val fc-12m">' + F(dv.forecast_12m) + '</td>';
                             case 'avail_inv': return invCellHtml(od, mm, tableExtras.gauge);
                             case 'sku_min': return '<td style="color:#6a1b9a;">' + (mm ? fmt(mm.min) : '-') + '</td>';
                             case 'sku_max': return '<td style="color:#6a1b9a;">' + (mm ? fmt(mm.max) : '-') + '</td>';
@@ -3510,9 +3518,10 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                                 const o = orderToMin(od, mm);
                                 if (!o) return '<td style="color:#bbb;">-</td>';   // no Min set for this item/location
                                 let inner = '<strong style="color:' + (o.buy > 0 ? '#c62828' : '#2e7d32') + ';">' + fmt(o.buy) + '</strong>';
-                                if (o.mult) inner += '<div style="font-size:10px;color:#888;">lots of ' + fmt(o.mult) + (o.buy !== o.need ? ' · need ' + fmt(o.need) : '') + '</div>';
+                                if (o.mult && o.buy !== o.need) inner += '<div style="font-size:10px;color:#888;">need ' + fmt(o.need) + '</div>';
                                 return '<td>' + inner + '</td>';
                             }
+                            case 'sku_mult': return '<td style="color:#6a1b9a;">' + (mm && mm.mult > 1 ? fmt(mm.mult) : '') + '</td>';
                             default: return '<td>-</td>';
                         }
                     };
@@ -5302,8 +5311,8 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             const grpBg = { forecast: '#1565c0', stock: '#6a1b9a', net: '#e65100' };
             const subBg = { forecast: 'background:#e3f2fd;color:#1565c0;', stock: 'background:#f3e5f5;color:#6a1b9a;', net: 'background:#fff3e0;color:#e65100;' };
             const thId = 'background:#e8eaf6;padding:6px 10px;color:#1a237e;font-weight:600;font-size:11px;text-align:left;position:sticky;top:0;z-index:5;vertical-align:middle;';
-            const thGrp = 'padding:5px 10px;color:white;font-weight:700;font-size:10px;letter-spacing:0.8px;text-align:center;position:sticky;top:0;z-index:5;';
-            const thSub = 'padding:6px 10px;font-weight:600;font-size:11px;text-align:right;position:sticky;top:27px;z-index:5;';
+            const thGrp = 'padding:5px 10px;color:white;font-weight:700;font-size:10px;line-height:15px;letter-spacing:0.8px;text-align:center;position:sticky;top:0;z-index:5;';
+            const thSub = 'padding:6px 10px;font-weight:600;font-size:11px;text-align:right;position:sticky;top:24px;z-index:5;';
             const sc = (key) => {
                 let cls = 'sortable';
                 if (plannerSort.key === key) cls += plannerSort.dir === 'asc' ? ' sorted-asc' : ' sorted-desc';
@@ -5453,13 +5462,17 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             lanesVendorKeys = vkeys;
             sm += '<span style="margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-size:12px;">'
                 + '<strong style="color:#555;">Vendor:</strong>'
+                + '<span style="position:relative;display:inline-block;">'
                 + '<input list="lanesVendorDL" value="' + escAttr(lanesVendor ? vlabel(lanesVendor) : '') + '"'
                 + ' placeholder="All vendors — type to filter" onchange="lanesVendorTyped(this.value)"'
-                + ' style="width:230px;padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:12px;">'
+                + ' style="width:230px;padding:6px 26px 6px 10px;border:1px solid #ccc;border-radius:6px;font-size:12px;">'
+                + (lanesVendor ? '<span class="vendor-clear" onclick="setLanesVendor(\'\')">&times;</span>' : '')
+                + '</span>'
                 + '<datalist id="lanesVendorDL"><option value="All vendors"></option>'
                 + vkeys.map(vk => '<option value="' + escAttr(vlabel(vk)) + '" label="' + vendCount[vk] + ' items"></option>').join('')
                 + '</datalist> '
                 + plannerChip(lanesByVendor, 'toggleLanesByVendor()', 'Group by vendor')
+                + ' <button type="button" class="btn btn-outline" style="padding:6px 12px;font-size:12px;" onclick="lanesExportCSV()">Export CSV</button>'
                 + '</span>';
             sm += '</div>';
             document.getElementById('plannerSummary').innerHTML = sm;
@@ -5528,6 +5541,34 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             }
             h += '</div>';
             document.getElementById('plannerContent').innerHTML = h;
+        }
+
+        // CSV of the current Priority Lanes view (respects location + vendor filter)
+        function lanesExportCSV() {
+            const rows = plannerAllRows();
+            const out = [];
+            for (const r of rows) {
+                if (r.monthlyAvg <= 0 && r.net <= 0 && r.availInv <= 0) continue;
+                if (lanesVendor && (r.vendorNo || '__none__') !== lanesVendor) continue;
+                const st = plannerHealthOf(r);
+                const lane = st.key === 'ok' ? 'HEALTHY' : (st.key === 'over' ? 'OVERSTOCKED' : st.label);
+                out.push({ r, st, lane });
+            }
+            if (out.length === 0) { alert('Nothing to export.'); return; }
+            const laneRank = { 'ORDER NOW': 0, 'WATCH': 1, 'HEALTHY': 2, 'OVERSTOCKED': 3 };
+            out.sort((a, b) => laneRank[a.lane] - laneRank[b.lane] || b.r.net - a.r.net);
+            const q = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+            const s = plannerState;
+            let csv = ['Lane', 'Item No', 'Description', 'Vendor', 'Cover (months)', 'Net (' + s.months + 'M)', 'Inventory', 'On SO', 'On PO', 'SKU Min', 'SKU Max'].map(q).join(',') + '\n';
+            for (const e of out) {
+                csv += [e.lane, e.r.itemNo, e.r.description || '', e.r.vendorNo ? vendorDisplayLabel(e.r.vendorNo) : '',
+                    isFinite(e.st.cover) ? Math.round(e.st.cover * 10) / 10 : '',
+                    e.r.net, e.r.availInv, e.r.salesQty, e.r.purchQty,
+                    e.r.skuMin != null ? e.r.skuMin : '', e.r.skuMax != null ? e.r.skuMax : ''].map(q).join(',') + '\n';
+            }
+            plannerDownloadCSV(csv, 'priority-lanes-' + s.months + 'm-' + s.method
+                + (s.locations.length ? '-loc' + plannerLocLabel() : '')
+                + (lanesVendor ? '-' + (lanesVendor === '__none__' ? 'no-vendor' : lanesVendor) : '') + '.csv');
         }
 
         // ---- Single-vendor drill-down popup ----
