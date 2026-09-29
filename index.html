@@ -329,6 +329,10 @@
             justify-content: center; align-items: center;
         }
         .modal-overlay.active { display: flex; }
+        /* Scrolling inside an open popup stays inside it — never chains to the pane behind */
+        .modal-overlay, .modal-overlay [style*="overflow-y:auto"], .modal-overlay [style*="overflow-y: auto"],
+        #plannerScroll, #plannerVendorScroll, #detailScroll, #detailListPane,
+        #advModalContent, #containerContent, #themePicker { overscroll-behavior: contain; }
 
         /* Toast notification system (BUG 1) */
         /* Order Planner sits above everything, including the import badges */
@@ -4914,6 +4918,11 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             plannerTab = t;
             renderPlanner();
         }
+        // Priority Lanes view options: vendor filter + group-by-vendor display
+        let lanesVendor = '';        // '' = all vendors, '__none__' = no vendor assigned
+        let lanesByVendor = false;
+        function setLanesVendor(v) { lanesVendor = v; renderPlannerLanesView(); }
+        function toggleLanesByVendor() { lanesByVendor = !lanesByVendor; renderPlannerLanesView(); }
         let plannerExtras = { gauge: false, status: false };
         try { Object.assign(plannerExtras, JSON.parse(localStorage.getItem('forecastPlannerExtras') || '{}')); } catch (e) {}
         function togglePlannerExtra(k) {
@@ -4986,6 +4995,8 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             plannerState.locations = [];
             plannerSort = { key: 'per', dir: 'desc' };
             plannerTab = 'planner';
+            lanesVendor = '';
+            lanesByVendor = false;
         }
         function setPlannerOpt(key, value) {
             plannerState[key] = key === 'months' ? parseFloat(value) : value;
@@ -5348,9 +5359,20 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         function renderPlannerLanesView() {
             const s = plannerState;
             const rows = plannerAllRows();
-            const lanes = { order: [], watch: [], healthy: [], over: [] };
+            // Live rows only, counted per vendor (for the filter dropdown), then filtered
+            const alive = [];
+            const vendCount = {};
             for (const r of rows) {
                 if (r.monthlyAvg <= 0 && r.net <= 0 && r.availInv <= 0) continue;   // dead lines
+                alive.push(r);
+                const vk = r.vendorNo || '__none__';
+                vendCount[vk] = (vendCount[vk] || 0) + 1;
+            }
+            const vkey = (r) => r.vendorNo || '__none__';
+            const vlabel = (vk) => vk === '__none__' ? 'No vendor assigned' : vendorDisplayLabel(vk);
+            const lanes = { order: [], watch: [], healthy: [], over: [] };
+            for (const r of alive) {
+                if (lanesVendor && vkey(r) !== lanesVendor) continue;
                 const st = plannerHealthOf(r);
                 lanes[st.key === 'ok' ? 'healthy' : st.key].push({ r, st });
             }
@@ -5359,38 +5381,66 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             lanes.over.sort((a, b) => b.r.availInv - a.r.availInv);
             lanes.healthy.sort((a, b) => a.st.cover - b.st.cover);
             const locTag = s.locations.length ? ' · Loc ' + esc(plannerLocLabel()) : '';
-            let sm = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;">';
+            let sm = '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">';
             const smTile = (n, l, c, bg) => '<div style="background:' + bg + ';padding:8px 16px;border-radius:8px;text-align:center;"><div style="font-size:17px;font-weight:700;color:' + c + ';">' + n.toLocaleString() + '</div><div style="font-size:10px;color:#666;">' + l + locTag + '</div></div>';
             sm += smTile(lanes.order.length, 'Order Now', '#c62828', '#ffebee');
             sm += smTile(lanes.watch.length, 'Watch', '#e65100', '#fff3e0');
             sm += smTile(lanes.healthy.length, 'Healthy', '#2e7d32', '#e8f5e9');
             sm += smTile(lanes.over.length, 'Overstocked', '#6a1b9a', '#f3e5f5');
+            // Vendor filter + by-vendor grouping, just for this tab
+            const vkeys = Object.keys(vendCount).sort((a, b) => vendCount[b] - vendCount[a] || a.localeCompare(b));
+            sm += '<span style="margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-size:12px;">'
+                + '<strong style="color:#555;">Vendor:</strong>'
+                + '<select onchange="setLanesVendor(this.value)" style="max-width:260px;padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:12px;">'
+                + '<option value="">All vendors (' + alive.length.toLocaleString() + ' items)</option>'
+                + vkeys.map(vk => '<option value="' + escAttr(vk) + '"' + (lanesVendor === vk ? ' selected' : '') + '>' + esc(vlabel(vk)) + ' (' + vendCount[vk] + ')</option>').join('')
+                + '</select> '
+                + plannerChip(lanesByVendor, 'toggleLanesByVendor()', 'Group by vendor')
+                + '</span>';
             sm += '</div>';
             document.getElementById('plannerSummary').innerHTML = sm;
 
-            const CAP = 80;
             const defs = [
                 ['order', 'ORDER NOW', '#c62828', 'under 1 month of cover'],
                 ['watch', 'WATCH', '#e65100', '1–3 months of cover'],
                 ['healthy', 'HEALTHY', '#2e7d32', 'comfortable cover'],
                 ['over', 'OVERSTOCKED', '#6a1b9a', 'above max or 12+ months'],
             ];
+            const card = (e, key, color) => {
+                const badge = key === 'over' ? fmt(e.r.availInv) + ' inv'
+                    : key === 'healthy' ? (isFinite(e.st.cover) ? (Math.round(e.st.cover * 10) / 10) + 'mo' : '∞')
+                    : fmt(e.r.net) + ' net';
+                return '<div onclick="showItemDetail(\'' + escJS(e.r.itemNo) + '\')" style="background:white;border:1px solid #eceef6;border-left:3px solid ' + color + ';border-radius:8px;padding:7px 10px;margin-bottom:6px;cursor:pointer;">'
+                    + '<div style="display:flex;justify-content:space-between;gap:8px;"><span style="font-weight:600;color:#1a237e;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(e.r.itemNo) + '</span>'
+                    + '<span style="font-size:11px;color:' + color + ';font-weight:700;white-space:nowrap;">' + badge + '</span></div>'
+                    + '<div style="font-size:10px;color:#999;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(e.r.description || '') + (e.r.vendorNo ? ' · ' + esc(vendorDisplayLabel(e.r.vendorNo)) : '') + '</div></div>';
+            };
             let h = '<div style="display:flex;gap:12px;align-items:flex-start;">';
             for (const [key, label, color, hint] of defs) {
                 const arr = lanes[key];
                 h += '<div style="flex:1;min-width:0;background:#fafbfe;border:1px solid #e8eaf2;border-radius:10px;display:flex;flex-direction:column;">'
                   + '<div style="padding:9px 12px;border-bottom:2px solid ' + color + ';flex-shrink:0;"><span style="font-weight:700;color:' + color + ';font-size:12px;letter-spacing:1px;">' + label + '</span> <span style="font-size:11px;color:#999;">' + arr.length + ' · ' + hint + '</span></div>'
                   + '<div style="padding:8px;">';
-                for (const e of arr.slice(0, CAP)) {
-                    const badge = key === 'over' ? fmt(e.r.availInv) + ' inv'
-                        : key === 'healthy' ? (isFinite(e.st.cover) ? (Math.round(e.st.cover * 10) / 10) + 'mo' : '∞')
-                        : fmt(e.r.net) + ' net';
-                    h += '<div onclick="showItemDetail(\'' + escJS(e.r.itemNo) + '\')" style="background:white;border:1px solid #eceef6;border-left:3px solid ' + color + ';border-radius:8px;padding:7px 10px;margin-bottom:6px;cursor:pointer;">'
-                      + '<div style="display:flex;justify-content:space-between;gap:8px;"><span style="font-weight:600;color:#1a237e;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(e.r.itemNo) + '</span>'
-                      + '<span style="font-size:11px;color:' + color + ';font-weight:700;white-space:nowrap;">' + badge + '</span></div>'
-                      + '<div style="font-size:10px;color:#999;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(e.r.description || '') + (e.r.vendorNo ? ' · ' + esc(vendorDisplayLabel(e.r.vendorNo)) : '') + '</div></div>';
+                if (lanesByVendor) {
+                    // Bucket this lane's items under vendor headers, biggest vendors first,
+                    // keeping the lane's own urgency order inside each bucket.
+                    const buckets = new Map();
+                    for (const e of arr) {
+                        const vk = vkey(e.r);
+                        if (!buckets.has(vk)) buckets.set(vk, []);
+                        buckets.get(vk).push(e);
+                    }
+                    const bkeys = Array.from(buckets.keys()).sort((a, b) => buckets.get(b).length - buckets.get(a).length || a.localeCompare(b));
+                    for (const vk of bkeys) {
+                        const items = buckets.get(vk);
+                        h += '<div style="margin:10px 0 6px;padding:5px 9px;background:#eef0f7;border-radius:6px;font-size:11px;font-weight:700;color:#333;display:flex;justify-content:space-between;gap:8px;">'
+                          + '<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(vlabel(vk)) + '</span><span style="color:#888;flex-shrink:0;">' + items.length + '</span></div>';
+                        for (const e of items) h += card(e, key, color);
+                    }
+                } else {
+                    for (const e of arr) h += card(e, key, color);
                 }
-                if (arr.length > CAP) h += '<div style="text-align:center;font-size:11px;color:#999;padding:4px;">+' + (arr.length - CAP) + ' more</div>';
+                if (arr.length === 0) h += '<div style="text-align:center;font-size:11px;color:#bbb;padding:10px;">None</div>';
                 h += '</div></div>';
             }
             h += '</div>';
