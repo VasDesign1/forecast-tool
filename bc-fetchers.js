@@ -472,7 +472,59 @@ async function bcFetchOutstandingByLoc(kind, exclude, label) {
 // Each part fails independently: a null map means "fall back to the
 // company-wide item-card figure" and the diagnostic says why.
 async function bcFetchLocationData() {
-    const result = { inv: null, so: null, po: null, diagnostics: { inv: "", so: "", po: "" } };
+    const result = { inv: null, so: null, po: null, sku: null,
+                     diagnostics: { inv: "", so: "", po: "", sku: "" } };
+
+    // --- Stockkeeping Units: per item × branch min/max levels. Prefers the
+    // Minimum/Maximum Order Quantity pair; if the tenant keeps its numbers
+    // in Reorder Point / Maximum Inventory instead, uses those and says so.
+    try {
+        const names = await bcListODataEntities();
+        const entity = names.find(n => /stockkeeping/i.test(n));
+        if (!entity) throw new Error("no stockkeeping-unit page published in OData");
+        const coName = encodeURIComponent(BC_CONFIG.companyName);
+        const base = BC_ODATA_URL + "/Company('" + coName + "')/" + entity;
+        const sample = await bcFetch(base + "?$top=1");
+        const fields = (sample.value && sample.value[0]) ? Object.keys(sample.value[0]) : [];
+        const fItem = bcPickField(fields, ["Item_No", "itemNo", "number"]);
+        const fLoc = bcPickField(fields, ["Location_Code", "locationCode"]);
+        const fMinOrd = bcPickField(fields, ["Minimum_Order_Quantity", "minimumOrderQuantity"]);
+        const fMaxOrd = bcPickField(fields, ["Maximum_Order_Quantity", "maximumOrderQuantity"]);
+        const fReord = bcPickField(fields, ["Reorder_Point", "reorderPoint"]);
+        const fMaxInv = bcPickField(fields, ["Maximum_Inventory", "maximumInventory"]);
+        console.log("SKU entity:", entity, "| item:", fItem, "loc:", fLoc,
+            "minOrd:", fMinOrd, "maxOrd:", fMaxOrd, "reorderPt:", fReord, "maxInv:", fMaxInv);
+        if (!fItem || !fLoc) throw new Error("page " + entity + " lacks item/location fields");
+        const rows = await bcFetchAll(base, "Stockkeeping units");
+        let ordNonZero = 0, invNonZero = 0;
+        for (const r of rows) {
+            if ((parseFloat(r[fMinOrd]) || 0) !== 0 || (parseFloat(r[fMaxOrd]) || 0) !== 0) ordNonZero++;
+            if ((parseFloat(r[fReord]) || 0) !== 0 || (parseFloat(r[fMaxInv]) || 0) !== 0) invNonZero++;
+        }
+        // Pick whichever pair actually holds data on this tenant.
+        const useOrd = (fMinOrd || fMaxOrd) && (ordNonZero >= invNonZero || !(fReord || fMaxInv));
+        const fMin = useOrd ? fMinOrd : fReord;
+        const fMax = useOrd ? fMaxOrd : fMaxInv;
+        const sku = {};
+        let kept = 0;
+        for (const r of rows) {
+            const item = String(r[fItem] || "").trim();
+            if (!item) continue;
+            const loc = String(r[fLoc] || "").trim() || "DEFAULT";
+            const mn = fMin ? (parseFloat(r[fMin]) || 0) : 0;
+            const mx = fMax ? (parseFloat(r[fMax]) || 0) : 0;
+            if (mn === 0 && mx === 0) continue;
+            if (!sku[item]) sku[item] = {};
+            sku[item][loc] = { min: mn, max: mx };
+            kept++;
+        }
+        result.sku = sku;
+        result.diagnostics.sku = rows.length + " SKUs via " + entity + ", " + kept + " with levels, using "
+            + (useOrd ? (fMinOrd + "/" + fMaxOrd) : (fReord + "/" + fMaxInv));
+    } catch (e) {
+        result.diagnostics.sku = "unavailable — " + e.message;
+        console.warn("Stockkeeping-unit fetch failed:", e.message);
+    }
 
     try {
         // Prefer the v2.0 API when it exposes a location field; this tenant's

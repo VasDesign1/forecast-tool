@@ -2355,7 +2355,7 @@
         // Per-branch maps loaded from Wiise (branch stock from the full item
         // ledger; open SO/PO lines per location). Empty selection → the
         // company-wide item-card figures, exactly as before.
-        let locData = { inv: null, so: null, po: null, diagnostics: null };
+        let locData = { inv: null, so: null, po: null, sku: null, diagnostics: null };
 
         function getScopedOrderData(itemNo, locsOverride) {
             const locs = locsOverride !== undefined ? locsOverride : selectedLocations;
@@ -2383,12 +2383,31 @@
             };
         }
 
+        // Min/Max stock levels from Stockkeeping Units (per item × branch).
+        // locs empty → sum over every branch that has an SKU; locations
+        // selected → sum over those. null = no SKU anywhere relevant.
+        function getSkuMinMax(itemNo, locsOverride) {
+            const map = locData.sku;
+            if (!map || !map[itemNo]) return null;
+            const locs = locsOverride !== undefined ? locsOverride : selectedLocations;
+            const byLoc = map[itemNo];
+            const keys = (!locs || locs.length === 0) ? Object.keys(byLoc) : locs.filter(l => byLoc[l]);
+            if (keys.length === 0) return null;
+            let mn = 0, mx = 0;
+            for (const l of keys) { mn += byLoc[l].min || 0; mx += byLoc[l].max || 0; }
+            return { min: mn, max: mx };
+        }
+
         function getSortValue(item, col) {
             if (col === 'item_no' || col === 'description') {
                 return (item[col] || '').toLowerCase();
             }
             if (col === 'avail_inv') {
                 return getScopedOrderData(item.item_no).availInv || 0;
+            }
+            if (col === 'sku_min' || col === 'sku_max') {
+                const mm = getSkuMinMax(item.item_no);
+                return mm ? (col === 'sku_min' ? mm.min : mm.max) : -1;
             }
             if (col === 'qty_sales_order') {
                 return getScopedOrderData(item.item_no).salesQty || 0;
@@ -2448,9 +2467,16 @@
             ];
 
             const hasOrders = Object.keys(orderData).length > 0;
+            const hasSku = !!locData.sku;
             if (hasOrders) {
+                columns.push({ key: 'avail_inv', label: 'Inventory' });
+                if (hasSku) {
+                    columns.push(
+                        { key: 'sku_min', label: 'Min Qty' },
+                        { key: 'sku_max', label: 'Max Qty' },
+                    );
+                }
                 columns.push(
-                    { key: 'avail_inv', label: 'Inventory' },
                     { key: 'qty_sales_order', label: 'Qty on Sales Order' },
                     { key: 'qty_purch_order', label: 'Qty on Purch. Order' },
                     { key: 'net_3m', label: 'Net to Purchase 3M' },
@@ -2494,6 +2520,11 @@
                         const net12 = calcNet(dv.forecast_12m);
                         const invStyle = od.availInv < 0 ? 'color:#c62828;font-weight:600;' : 'font-weight:600;';
                         html += '<td style="' + invStyle + '">' + fmt(od.availInv) + '</td>';
+                        if (hasSku) {
+                            const mm = getSkuMinMax(item.item_no);
+                            html += '<td style="color:#6a1b9a;">' + (mm ? fmt(mm.min) : '-') + '</td>';
+                            html += '<td style="color:#6a1b9a;">' + (mm ? fmt(mm.max) : '-') + '</td>';
+                        }
                         html += '<td style="color:#1565c0;font-weight:600;">' + fmt(od.salesQty) + '</td>';
                         html += '<td style="color:#2e7d32;font-weight:600;">' + fmt(od.purchQty) + '</td>';
                         html += '<td class="forecast-val fc-3m">' + fmt(net3) + '</td>';
@@ -3818,8 +3849,20 @@
         // page's Container Planner (the real section is adopted into the
         // popup and returned on close, so every container button works).
         // ============================================================
-        const plannerState = { period: 'weekly', group: 'vendor', months: 6, method: 'standard', search: '', maximized: false, location: '' };
-        function plannerLocs() { return plannerState.location ? [plannerState.location] : []; }
+        const plannerState = { period: 'weekly', group: 'vendor', months: 6, method: 'standard', search: '', maximized: false, locations: [] };
+        function plannerLocs() { return plannerState.locations; }
+        function plannerLocLabel() { return plannerState.locations.join('+'); }
+        function togglePlannerLoc(encLoc) {   // '' clears (the All chip); others toggle
+            const l = decodeURIComponent(encLoc);
+            if (!l) {
+                plannerState.locations = [];
+            } else {
+                const i = plannerState.locations.indexOf(l);
+                if (i === -1) plannerState.locations.push(l); else plannerState.locations.splice(i, 1);
+            }
+            renderPlanner();
+            if (document.getElementById('plannerVendorModal').classList.contains('active')) renderPlannerVendorDetail();
+        }
         let plannerSearchTimer = null;
         let plannerVendorKey = null;       // vendor open in the drill-down popup
         let plannerSort = { key: 'per', dir: 'desc' };
@@ -3868,7 +3911,7 @@
             plannerState.method = 'standard';
             plannerState.search = '';
             plannerState.maximized = false;
-            plannerState.location = '';
+            plannerState.locations = [];
             plannerSort = { key: 'per', dir: 'desc' };
         }
         function setPlannerOpt(key, value) {
@@ -3937,12 +3980,15 @@
                 const net = Math.max(0, forecast + od.salesQty - od.availInv - od.purchQty);
                 if (net <= 0) continue;
                 const vendors = vendorMapping[d.item_no] || [];
+                const mm = getSkuMinMax(d.item_no, pLocs);
                 rows.push({
                     itemNo: d.item_no,
                     description: d.description || '',
                     vendorNo: vendors[0] || '',
                     forecast: forecast,
                     availInv: od.availInv,
+                    skuMin: mm ? mm.min : null,
+                    skuMax: mm ? mm.max : null,
                     purchQty: od.purchQty,
                     salesQty: od.salesQty,
                     net: net,
@@ -4014,8 +4060,8 @@
                 + plannerChip(s.group === 'item', "setPlannerOpt('group','item')", 'Item') + '</span>';
             if (allLocationsList.length > 0) {
                 ch += '<span><strong style="color:#555;">Location:</strong> '
-                    + plannerChip(s.location === '', "setPlannerOpt('location','')", 'All') + ' '
-                    + allLocationsList.map(l => plannerChip(s.location === l, "setPlannerOpt('location','" + escAttr(l) + "')", 'Loc ' + esc(l))).join(' ')
+                    + plannerChip(s.locations.length === 0, "togglePlannerLoc('')", 'All') + ' '
+                    + allLocationsList.map(l => plannerChip(s.locations.includes(l), "togglePlannerLoc('" + encodeURIComponent(l).replace(/'/g, '%27') + "')", 'Loc ' + esc(l))).join(' ')
                     + '</span>';
             }
             ch += '<span><strong style="color:#555;">Horizon:</strong> '
@@ -4033,14 +4079,15 @@
             ch += '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:12px;font-size:12px;">';
             ch += '<input type="text" id="plannerSearch" placeholder="' + (s.group === 'vendor' ? 'Search vendors...' : 'Search item no. or description...') + '" value="' + escAttr(s.search) + '" oninput="plannerSearchInput(this.value)"'
                 + ' style="flex:1;min-width:220px;max-width:420px;padding:7px 12px;border:1px solid #ccc;border-radius:6px;font-size:12px;">';
-            if (s.location) {
+            if (s.locations.length > 0) {
                 const missing = [];
                 if (!locData.inv) missing.push('branch stock');
                 if (!locData.so) missing.push('branch sales orders');
                 if (!locData.po) missing.push('branch purchase orders');
+                if (!locData.sku) missing.push('min/max levels');
                 ch += missing.length === 0
-                    ? '<span style="font-size:11px;color:#2e7d32;">Showing Loc ' + esc(s.location) + ' only — stock, SO and PO are per-branch.</span>'
-                    : '<span style="font-size:11px;color:#e65100;">Loc ' + esc(s.location) + ': ' + esc(missing.join(', ')) + ' unavailable — using company-wide figures for those.</span>';
+                    ? '<span style="font-size:11px;color:#2e7d32;">Showing Loc ' + esc(plannerLocLabel()) + ' only — stock, SO, PO and min/max are per-branch.</span>'
+                    : '<span style="font-size:11px;color:#e65100;">Loc ' + esc(plannerLocLabel()) + ': ' + esc(missing.join(', ')) + ' unavailable — using company-wide figures for those.</span>';
             }
             ch += '</div>';
             document.getElementById('plannerControls').innerHTML = ch;
@@ -4058,6 +4105,12 @@
             cols.push(
                 { key: 'forecast', label: 'Forecast ' + plannerState.months + 'M', style: thS },
                 { key: 'availInv', label: 'On Hand', style: thS },
+            );
+            if (locData.sku) cols.push(
+                { key: 'skuMin', label: 'Min Qty', style: thS + 'color:#6a1b9a;' },
+                { key: 'skuMax', label: 'Max Qty', style: thS + 'color:#6a1b9a;' },
+            );
+            cols.push(
                 { key: 'purchQty', label: 'On PO', style: thS },
                 { key: 'salesQty', label: 'On SO', style: thS },
                 { key: 'net', label: 'Net to Order', style: thS },
@@ -4077,8 +4130,12 @@
             let h = '<tr><td style="' + td + 'font-weight:600;">' + esc(r.itemNo) + '</td><td style="' + td + '">' + esc(r.description) + '</td>';
             if (withVendor) h += '<td style="' + td + '">' + esc(r.vendorNo ? vendorDisplayLabel(r.vendorNo) : '-') + '</td>';
             h += '<td style="' + tdR + '">' + Math.round(r.forecast).toLocaleString() + '</td>'
-               + '<td style="' + tdR + '">' + Math.round(r.availInv).toLocaleString() + '</td>'
-               + '<td style="' + tdR + '">' + Math.round(r.purchQty).toLocaleString() + '</td>'
+               + '<td style="' + tdR + '">' + Math.round(r.availInv).toLocaleString() + '</td>';
+            if (locData.sku) {
+                h += '<td style="' + tdR + 'color:#6a1b9a;">' + (r.skuMin == null ? '-' : Math.round(r.skuMin).toLocaleString()) + '</td>'
+                   + '<td style="' + tdR + 'color:#6a1b9a;">' + (r.skuMax == null ? '-' : Math.round(r.skuMax).toLocaleString()) + '</td>';
+            }
+            h += '<td style="' + tdR + '">' + Math.round(r.purchQty).toLocaleString() + '</td>'
                + '<td style="' + tdR + '">' + Math.round(r.salesQty).toLocaleString() + '</td>'
                + '<td style="' + tdR + 'font-weight:600;">' + Math.round(r.net).toLocaleString() + '</td>'
                + '<td style="' + tdR + 'font-weight:700;color:#e65100;">' + r[plannerPerKey()].toLocaleString() + '</td></tr>';
@@ -4096,7 +4153,7 @@
             const totalPer = rows.reduce((a, r) => a + r[perKey], 0);
 
             // Summary tiles live in the pinned head, above the scroll area.
-            const locTag = s.location ? ' · Loc ' + esc(s.location) : '';
+            const locTag = s.locations.length ? ' · Loc ' + esc(plannerLocLabel()) : '';
             let sm = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;">';
             sm += '<div style="background:#e8eaf6;padding:8px 16px;border-radius:8px;text-align:center;"><div style="font-size:17px;font-weight:700;color:#1a237e;">' + rows.length.toLocaleString() + '</div><div style="font-size:10px;color:#666;">Items to Order' + locTag + '</div></div>';
             sm += '<div style="background:#e8f5e9;padding:8px 16px;border-radius:8px;text-align:center;"><div style="font-size:17px;font-weight:700;color:#2e7d32;">' + Math.round(totalNet).toLocaleString() + '</div><div style="font-size:10px;color:#666;">Net Units over ' + months + 'M' + locTag + '</div></div>';
@@ -4179,7 +4236,7 @@
             document.getElementById('plannerVendorStats').innerHTML =
                 '<strong>' + rows.length + '</strong> items · <strong style="color:#e65100;">' + Math.round(subPer).toLocaleString() + '</strong> units ' + (s.period === 'weekly' ? 'per week' : 'per month')
                 + ' · <strong>' + Math.round(subNet).toLocaleString() + '</strong> net over ' + s.months + ' months (' + PLANNER_METHODS.find(m => m.key === s.method).label + ' method)'
-                + (s.location ? ' · <strong style="color:#1a237e;">Loc ' + esc(s.location) + ' only</strong>' : '');
+                + (s.locations.length ? ' · <strong style="color:#1a237e;">Loc ' + esc(plannerLocLabel()) + ' only</strong>' : '');
             // Container Planner only for container (overseas) vendors — i.e.
             // vendors with at least one item carrying cubage (CBM) data.
             const btn = document.getElementById('plannerVendorContainerBtn');
@@ -4268,11 +4325,14 @@
             const s = plannerState;
             const perKey = plannerPerKey();
             const perLabel = s.period === 'weekly' ? 'Order Per Week' : 'Order Per Month';
-            const lines = ['Vendor,Item No.,Description,Forecast ' + s.months + 'M,On Hand,On PO,On SO,Net To Order,' + perLabel];
+            const hasSku = !!locData.sku;
+            const lines = ['Vendor,Item No.,Description,Forecast ' + s.months + 'M,On Hand,' + (hasSku ? 'Min Qty,Max Qty,' : '') + 'On PO,On SO,Net To Order,' + perLabel];
             for (const r of rows) {
                 const vend = r.vendorNo ? vendorDisplayLabel(r.vendorNo) : 'No vendor';
                 lines.push('"' + vend.replace(/"/g, '""') + '","' + r.itemNo.replace(/"/g, '""') + '","' + r.description.replace(/"/g, '""') + '",'
-                    + Math.round(r.forecast) + ',' + Math.round(r.availInv) + ',' + Math.round(r.purchQty) + ',' + Math.round(r.salesQty) + ',' + Math.round(r.net) + ',' + r[perKey]);
+                    + Math.round(r.forecast) + ',' + Math.round(r.availInv) + ','
+                    + (hasSku ? ((r.skuMin == null ? '' : Math.round(r.skuMin)) + ',' + (r.skuMax == null ? '' : Math.round(r.skuMax)) + ',') : '')
+                    + Math.round(r.purchQty) + ',' + Math.round(r.salesQty) + ',' + Math.round(r.net) + ',' + r[perKey]);
             }
             return lines.join('\n');
         }
@@ -4290,14 +4350,14 @@
             const rows = plannerFilteredRows();
             if (rows.length === 0) { alert('Nothing to order.'); return; }
             rows.sort((a, b) => (a.vendorNo || 'zzz').localeCompare(b.vendorNo || 'zzz') || b[perKey] - a[perKey]);
-            plannerDownloadCSV(plannerBuildCSV(rows), 'order-planner-' + s.period + '-' + s.months + 'm-' + s.method + (s.location ? '-loc' + s.location : '') + '.csv');
+            plannerDownloadCSV(plannerBuildCSV(rows), 'order-planner-' + s.period + '-' + s.months + 'm-' + s.method + (s.locations.length ? '-loc' + plannerLocLabel() : '') + '.csv');
         }
         function plannerVendorExportCSV() {
             const s = plannerState;
             const rows = plannerSortRows(plannerVendorRows());
             if (rows.length === 0) { alert('Nothing to order from this vendor.'); return; }
             const tag = plannerVendorKey === '__none__' ? 'no-vendor' : plannerVendorKey;
-            plannerDownloadCSV(plannerBuildCSV(rows), 'order-planner-' + tag + '-' + s.period + '-' + s.months + 'm-' + s.method + (s.location ? '-loc' + s.location : '') + '.csv');
+            plannerDownloadCSV(plannerBuildCSV(rows), 'order-planner-' + tag + '-' + s.period + '-' + s.months + 'm-' + s.method + (s.locations.length ? '-loc' + plannerLocLabel() : '') + '.csv');
         }
 
         function exportCSV() {
@@ -4309,8 +4369,11 @@
             let headers = ['Item No.', 'Description', 'Total Used (' + totalMonthsGlobal + 'M)' + locLabel, 'Monthly Avg' + locLabel, 'Forecast 3M' + locLabel, 'Forecast 6M' + locLabel, 'Forecast 12M' + locLabel];
 
             const hasOrders = Object.keys(orderData).length > 0;
+            const hasSku = !!locData.sku;
             if (hasOrders) {
-                headers.push('Inventory' + locLabel, 'Qty on Sales Order' + locLabel, 'Qty on Purch. Order' + locLabel, 'Net to Purchase 3M' + locLabel, 'Net to Purchase 6M' + locLabel, 'Net to Purchase 12M' + locLabel);
+                headers.push('Inventory' + locLabel);
+                if (hasSku) headers.push('Min Qty' + locLabel, 'Max Qty' + locLabel);
+                headers.push('Qty on Sales Order' + locLabel, 'Qty on Purch. Order' + locLabel, 'Net to Purchase 3M' + locLabel, 'Net to Purchase 6M' + locLabel, 'Net to Purchase 12M' + locLabel);
             }
 
             function csvSafe(s) {
@@ -4330,8 +4393,13 @@
                 if (hasOrders) {
                     const od = getScopedOrderData(item.item_no);
                     const calcNet = (fc) => Math.max(0, Math.ceil(fc + od.salesQty - od.availInv - od.purchQty));
+                    row.push(od.availInv);
+                    if (hasSku) {
+                        const mm = getSkuMinMax(item.item_no);
+                        row.push(mm ? mm.min : '', mm ? mm.max : '');
+                    }
                     row.push(
-                        od.availInv, od.salesQty, od.purchQty,
+                        od.salesQty, od.purchQty,
                         calcNet(dv.forecast_3m), calcNet(dv.forecast_6m), calcNet(dv.forecast_12m),
                     );
                 }
@@ -4750,7 +4818,8 @@
         async function hydrateSnapshot(payload) {
             var d = payload.data;
             // Older snapshots predate branch data — fall back to company-wide.
-            locData = d.locData || { inv: null, so: null, po: null, diagnostics: null };
+            locData = d.locData || { inv: null, so: null, po: null, sku: null, diagnostics: null };
+            if (locData.sku === undefined) locData.sku = null;
             wiiseLedgerCache = d.ledger;
             await ensureNavSafe();
             applyLedgerRows();
