@@ -1124,6 +1124,10 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                     <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#444;cursor:pointer;user-select:none;padding:6px 4px;">
                         <input type="checkbox" id="navDataToggle" onchange="onNavToggle()"> Include old NAV data
                     </label>
+                    <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#444;cursor:pointer;user-select:none;padding:6px 4px;"
+                           title="Custom / special items: TDQ…, TD+number (e.g. TD335862), SM…, SP…, SPU/SPUQ…, 1000…. Hidden by default so stock lines stay tidy.">
+                        <input type="checkbox" id="specialItemsToggle" onchange="onSpecialToggle()"> Include custom/special items
+                    </label>
                 </div>
                 <div style="font-size:11px;margin-top:6px;">
                     <span id="navDataInfo" style="color:#2e7d32;"></span>
@@ -2897,12 +2901,26 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         });
         document.getElementById('pageSize').addEventListener('change', () => { currentPage = 1; renderTable(); document.getElementById('tableScroll').scrollTop = 0; });
 
+        // Custom/special items (made-to-order lines): TDQ..., TD<number> (e.g. TD335862),
+        // SM<number>, SP<number>, SPU/SPUQ..., 1000... — hidden unless the toggle is on.
+        let includeSpecialItems = false;
+        try { includeSpecialItems = localStorage.getItem('forecastIncludeSpecial') === '1'; } catch (e) {}
+        function isSpecialItem(no) {
+            return /^(TDQ|TD\d|SM\d|SP\d|SPU|1000)/i.test(String(no || ''));
+        }
+        function onSpecialToggle() {
+            includeSpecialItems = document.getElementById('specialItemsToggle').checked;
+            try { localStorage.setItem('forecastIncludeSpecial', includeSpecialItems ? '1' : '0'); } catch (e) {}
+            applyFilters();
+            if (document.getElementById('plannerModal').classList.contains('active')) renderPlanner();
+        }
         function applyFilters() {
             const search = document.getElementById('searchInput').value.toLowerCase().trim();
             const vendor = selectedVendor;
             const locs = selectedLocations;
 
             filteredData = allData.filter(item => {
+                if (!includeSpecialItems && isSpecialItem(item.item_no)) return false;
                 if (search) {
                     if (!item.item_no.toLowerCase().includes(search) &&
                         !item.description.toLowerCase().includes(search)) return false;
@@ -5140,6 +5158,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             const rows = [];
             const pLocs = plannerLocs();
             for (const d of allData) {
+                if (!includeSpecialItems && isSpecialItem(d.item_no)) continue;
                 const dv = getDisplayValues(d, plannerState.method, pLocs);
                 let forecast = dv['forecast_' + months + 'm'];
                 if (forecast == null) forecast = Math.ceil((dv.monthly_avg || 0) * months);
@@ -5316,6 +5335,18 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             if (r.net > 0 && cover < cuts.watch) return { key: 'watch', label: 'WATCH', color: '#e65100', rank: 1, cover };
             return { key: 'ok', label: 'OK', color: '#2e7d32', rank: 2, cover };
         }
+        // Column groups collapse to their summary column, like the main table
+        let plannerColOpen = { forecast: true, stock: true, net: true };
+        function togglePlannerColGroup(id) {
+            plannerColOpen[id] = !plannerColOpen[id];
+            renderPlanner();
+            if (document.getElementById('plannerVendorModal').classList.contains('active')) renderPlannerVendorDetail();
+        }
+        function plannerVisCols(g) {
+            if (plannerColOpen[g.id]) return g.cols;
+            const s = g.cols.find(c => c.key === g.summary);
+            return [s || g.cols[0]];
+        }
         function plannerColDefs(withVendor) {
             const idCols = [
                 { key: 'itemNo', label: 'Item' },
@@ -5324,19 +5355,19 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             if (withVendor) idCols.push({ key: 'vendorNo', label: 'Vendor' });
             if (plannerExtras.status) idCols.push({ key: 'status', label: 'Status' });
             const grps = [
-                { id: 'forecast', label: 'FORECAST', cols: [{ key: 'forecast', label: plannerState.months + 'M' }] },
+                { id: 'forecast', label: 'FORECAST', summary: 'forecast', cols: [{ key: 'forecast', label: plannerState.months + 'M' }] },
             ];
             const stockCols = [{ key: 'availInv', label: 'On Hand' }];
             if (locData.sku) stockCols.push({ key: 'skuMin', label: 'Min' }, { key: 'skuMax', label: 'Max' });
             stockCols.push({ key: 'purchQty', label: 'On PO' }, { key: 'salesQty', label: 'On SO' });
-            grps.push({ id: 'stock', label: 'STOCK & ORDERS', cols: stockCols });
+            grps.push({ id: 'stock', label: 'STOCK & ORDERS', summary: 'availInv', cols: stockCols });
             if (plannerExtras.minorder) {
-                grps.push({ id: 'net', label: 'NET TO PURCHASE (TO MIN)', cols: [
+                grps.push({ id: 'net', label: 'NET TO PURCHASE (TO MIN)', summary: 'netMin', cols: [
                     { key: 'netMin', label: 'Order Qty' },
                     { key: 'skuMult', label: 'Multiple' },
                 ]});
             } else {
-                grps.push({ id: 'net', label: 'NET TO PURCHASE', cols: [
+                grps.push({ id: 'net', label: 'NET TO PURCHASE', summary: 'per', cols: [
                     { key: 'net', label: 'Net to Order' },
                     { key: 'per', label: plannerPerLabel() },
                 ]});
@@ -5360,10 +5391,14 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 h += '<th rowspan="2" class="' + sc(c.key) + '" style="' + thId + '" onclick="plannerSortBy(\'' + c.key + '\')">' + c.label + '</th>';
             }
             for (const g of grps) {
-                h += '<th colspan="' + g.cols.length + '" style="' + thGrp + 'background:' + grpBg[g.id] + ';">' + g.label + '</th>';
+                const open = plannerColOpen[g.id];
+                h += '<th colspan="' + plannerVisCols(g).length + '" style="' + thGrp + 'background:' + grpBg[g.id] + ';cursor:pointer;"'
+                   + ' onclick="togglePlannerColGroup(\'' + g.id + '\')" title="' + (open ? 'Click to collapse' : 'Click to show all ' + g.cols.length + ' columns') + '">'
+                   + (open ? '&#x25BE; ' : '&#x25B8; ') + g.label
+                   + (open || g.cols.length < 2 ? '' : ' <span style="opacity:0.7;font-weight:400;">(+' + (g.cols.length - 1) + ')</span>') + '</th>';
             }
             h += '</tr><tr>';
-            for (const g of grps) for (const c of g.cols) {
+            for (const g of grps) for (const c of plannerVisCols(g)) {
                 h += '<th class="' + sc(c.key) + '" style="' + thSub + subBg[g.id] + '" onclick="plannerSortBy(\'' + c.key + '\')">' + c.label + '</th>';
             }
             return h + '</tr>';
@@ -5372,46 +5407,48 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             const td = 'padding:5px 10px;border-bottom:1px solid #eee;font-size:12px;';
             const tdR = td + 'text-align:right;';
             const st = plannerExtras.status ? plannerHealthOf(r) : null;
+            const o = plannerExtras.minorder
+                ? orderToMin({ availInv: r.availInv, salesQty: r.salesQty, purchQty: r.purchQty },
+                    r.skuMin != null && r.skuMin > 0 ? { min: r.skuMin, max: r.skuMax || 0, mult: r.skuMult || 0 } : null)
+                : null;
+            const cell = (key) => {
+                switch (key) {
+                    case 'forecast': return '<td style="' + tdR + '">' + Math.round(r.forecast).toLocaleString() + '</td>';
+                    case 'availInv': {
+                        const mmR = (r.skuMin != null || r.skuMax != null) ? { min: r.skuMin || 0, max: r.skuMax || 0 } : null;
+                        if (plannerExtras.gauge && mmR && mmR.max > 0) {
+                            const scale = mmR.max * 1.25;
+                            const p = (v) => Math.max(0, Math.min(100, v / scale * 100));
+                            const invColor = r.availInv < mmR.min ? '#c62828' : (r.availInv > mmR.max ? '#6a1b9a' : '#1a237e');
+                            return '<td style="' + tdR + '" title="' + escAttr('Inventory ' + fmt(r.availInv) + ' · Min ' + fmt(mmR.min) + ' · Max ' + fmt(mmR.max)) + '">'
+                                + '<div style="display:flex;align-items:center;justify-content:flex-end;gap:7px;">'
+                                + '<div style="position:relative;width:64px;height:8px;background:#eef0f7;border-radius:4px;flex-shrink:0;">'
+                                + '<div style="position:absolute;left:' + p(mmR.min) + '%;width:' + Math.max(2, p(mmR.max) - p(mmR.min)) + '%;top:0;bottom:0;background:#c5cae9;border-radius:4px;"></div>'
+                                + '<div style="position:absolute;left:calc(' + p(r.availInv) + '% - 3px);top:-2px;width:6px;height:12px;background:' + invColor + ';border-radius:2px;"></div>'
+                                + '</div><span style="font-weight:600;color:' + invColor + ';">' + fmt(r.availInv) + '</span></div></td>';
+                        }
+                        return '<td style="' + tdR + 'font-weight:600;' + (r.availInv < 0 ? 'color:#c62828;' : '') + '">' + Math.round(r.availInv).toLocaleString() + '</td>';
+                    }
+                    case 'skuMin': return '<td style="' + tdR + 'color:#6a1b9a;">' + (r.skuMin == null ? '-' : Math.round(r.skuMin).toLocaleString()) + '</td>';
+                    case 'skuMax': return '<td style="' + tdR + 'color:#6a1b9a;">' + (r.skuMax == null ? '-' : Math.round(r.skuMax).toLocaleString()) + '</td>';
+                    case 'purchQty': return '<td style="' + tdR + '">' + Math.round(r.purchQty).toLocaleString() + '</td>';
+                    case 'salesQty': return '<td style="' + tdR + '">' + Math.round(r.salesQty).toLocaleString() + '</td>';
+                    case 'net': return '<td style="' + tdR + 'font-weight:600;">' + Math.round(r.net).toLocaleString() + '</td>';
+                    case 'per': return '<td style="' + tdR + 'font-weight:700;color:#e65100;">' + r[plannerPerKey()].toLocaleString() + '</td>';
+                    case 'netMin': return !o ? '<td style="' + tdR + 'color:#bbb;">-</td>'
+                        : '<td style="' + tdR + 'font-weight:700;color:' + (o.buy > 0 ? '#c62828' : '#2e7d32') + ';">' + fmt(o.buy)
+                          + (o.mult && o.buy !== o.need ? '<div style="font-size:10px;color:#888;font-weight:400;">need ' + fmt(o.need) + '</div>' : '') + '</td>';
+                    case 'skuMult': return '<td style="' + tdR + 'color:#6a1b9a;">' + (o && o.mult ? fmt(o.mult) : (r.skuMult > 1 ? fmt(r.skuMult) : '')) + '</td>';
+                    default: return '<td style="' + tdR + '">-</td>';
+                }
+            };
             let h = '<tr' + (st ? ' style="box-shadow:inset 3px 0 0 ' + st.color + ';"' : '') + '>';
             h += '<td style="' + td + '"><a href="#" onclick="showItemDetail(\'' + escJS(r.itemNo) + '\');return false;" style="color:#1a237e;font-weight:600;text-decoration:underline;cursor:pointer;">' + esc(r.itemNo) + '</a></td>'
-               + '<td style="' + td + '">' + esc(r.description) + '</td>';
+               + '<td style="' + td + 'max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escAttr(r.description) + '">' + esc(r.description) + '</td>';
             if (withVendor) h += '<td style="' + td + '">' + esc(r.vendorNo ? vendorDisplayLabel(r.vendorNo) : '-') + '</td>';
             if (st) h += '<td style="' + td + '"><span style="background:' + st.color + '1a;color:' + st.color + ';font-weight:700;font-size:10px;padding:2px 8px;border-radius:10px;white-space:nowrap;">' + st.label + '</span></td>';
-            h += '<td style="' + tdR + '">' + Math.round(r.forecast).toLocaleString() + '</td>';
-            const mmR = (r.skuMin != null || r.skuMax != null) ? { min: r.skuMin || 0, max: r.skuMax || 0 } : null;
-            if (plannerExtras.gauge && mmR && mmR.max > 0) {
-                const scale = mmR.max * 1.25;
-                const p = (v) => Math.max(0, Math.min(100, v / scale * 100));
-                const invColor = r.availInv < mmR.min ? '#c62828' : (r.availInv > mmR.max ? '#6a1b9a' : '#1a237e');
-                h += '<td style="' + tdR + '" title="' + escAttr('Inventory ' + fmt(r.availInv) + ' · Min ' + fmt(mmR.min) + ' · Max ' + fmt(mmR.max)) + '">'
-                    + '<div style="display:flex;align-items:center;justify-content:flex-end;gap:7px;">'
-                    + '<div style="position:relative;width:64px;height:8px;background:#eef0f7;border-radius:4px;flex-shrink:0;">'
-                    + '<div style="position:absolute;left:' + p(mmR.min) + '%;width:' + Math.max(2, p(mmR.max) - p(mmR.min)) + '%;top:0;bottom:0;background:#c5cae9;border-radius:4px;"></div>'
-                    + '<div style="position:absolute;left:calc(' + p(r.availInv) + '% - 3px);top:-2px;width:6px;height:12px;background:' + invColor + ';border-radius:2px;"></div>'
-                    + '</div><span style="font-weight:600;color:' + invColor + ';">' + fmt(r.availInv) + '</span></div></td>';
-            } else {
-                h += '<td style="' + tdR + 'font-weight:600;' + (r.availInv < 0 ? 'color:#c62828;' : '') + '">' + Math.round(r.availInv).toLocaleString() + '</td>';
-            }
-            if (locData.sku) {
-                h += '<td style="' + tdR + 'color:#6a1b9a;">' + (r.skuMin == null ? '-' : Math.round(r.skuMin).toLocaleString()) + '</td>'
-                   + '<td style="' + tdR + 'color:#6a1b9a;">' + (r.skuMax == null ? '-' : Math.round(r.skuMax).toLocaleString()) + '</td>';
-            }
-            h += '<td style="' + tdR + '">' + Math.round(r.purchQty).toLocaleString() + '</td>'
-               + '<td style="' + tdR + '">' + Math.round(r.salesQty).toLocaleString() + '</td>';
-            if (plannerExtras.minorder) {
-                const o = orderToMin({ availInv: r.availInv, salesQty: r.salesQty, purchQty: r.purchQty },
-                    r.skuMin != null && r.skuMin > 0 ? { min: r.skuMin, max: r.skuMax || 0, mult: r.skuMult || 0 } : null);
-                if (!o) {
-                    h += '<td style="' + tdR + 'color:#bbb;">-</td><td style="' + tdR + '"></td>';
-                } else {
-                    h += '<td style="' + tdR + 'font-weight:700;color:' + (o.buy > 0 ? '#c62828' : '#2e7d32') + ';">' + fmt(o.buy)
-                       + (o.mult && o.buy !== o.need ? '<div style="font-size:10px;color:#888;font-weight:400;">need ' + fmt(o.need) + '</div>' : '') + '</td>'
-                       + '<td style="' + tdR + 'color:#6a1b9a;">' + (o.mult ? fmt(o.mult) : '') + '</td>';
-                }
-            } else {
-                h += '<td style="' + tdR + 'font-weight:600;">' + Math.round(r.net).toLocaleString() + '</td>'
-                   + '<td style="' + tdR + 'font-weight:700;color:#e65100;">' + r[plannerPerKey()].toLocaleString() + '</td>';
-            }
+            const { grps } = plannerColDefs(withVendor);
+            for (const g of grps) for (const c of plannerVisCols(g)) h += cell(c.key);
             h += '</tr>';
             return h;
         }
@@ -5703,8 +5740,19 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             selectedLocations = plannerLocs();
             syncLocButtons();
             selectVendor(plannerVendorKey);   // filters main data (vendor + location) → container plan builds
-            document.getElementById('plannerVendorContainerHost').appendChild(section);
-            document.getElementById('plannerVendorContainerHost').style.display = 'flex';
+            const host = document.getElementById('plannerVendorContainerHost');
+            host.appendChild(section);
+            // Never leave the popup blank: if the plan can't build, say why.
+            let cmsg = document.getElementById('plannerVendorContainerMsg');
+            if (!cmsg) {
+                cmsg = document.createElement('div');
+                cmsg.id = 'plannerVendorContainerMsg';
+                cmsg.style.cssText = 'padding:26px;text-align:center;color:#888;font-size:13px;';
+                cmsg.textContent = 'No container plan available for this vendor with the current filters — it needs items with cubage (CBM) data in the filtered list. Check the main-page date range/search, then reopen.';
+                host.insertBefore(cmsg, section);
+            }
+            cmsg.style.display = (section.style.display === 'none') ? 'block' : 'none';
+            host.style.display = 'flex';
             document.getElementById('plannerVendorContent').style.display = 'none';
             // The wrapper stops scrolling; the container's item table scrolls
             // internally so the whole top block stays pinned.
@@ -6013,6 +6061,10 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
 
         loadVendorMapping();
         uomData = getDefaultUomData();
+        (function initSpecialToggle() {
+            const t = document.getElementById('specialItemsToggle');
+            if (t) t.checked = includeSpecialItems;
+        })();
 
         // Close modals on Escape key
         document.addEventListener('keydown', function(e) {
