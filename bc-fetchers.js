@@ -494,7 +494,7 @@ async function bcFetchLocationData() {
         const fMult = bcPickField(fields, ["Order_Multiple", "orderMultiple"]);
         const fMaxInv = bcPickField(fields, ["Maximum_Inventory", "maximumInventory"]);
         console.log("SKU entity:", entity, "| item:", fItem, "loc:", fLoc,
-            "minOrd:", fMinOrd, "maxOrd:", fMaxOrd, "reorderPt:", fReord, "maxInv:", fMaxInv);
+            "minOrd:", fMinOrd, "maxOrd:", fMaxOrd, "reorderPt:", fReord, "maxInv:", fMaxInv, "orderMult:", fMult);
         if (!fItem || !fLoc) throw new Error("page " + entity + " lacks item/location fields");
         const rows = await bcFetchAll(base, "Stockkeeping units");
         let ordNonZero = 0, invNonZero = 0;
@@ -506,6 +506,10 @@ async function bcFetchLocationData() {
         const useOrd = (fMinOrd || fMaxOrd) && (ordNonZero >= invNonZero || !(fReord || fMaxInv));
         const fMin = useOrd ? fMinOrd : fReord;
         const fMax = useOrd ? fMaxOrd : fMaxInv;
+        // Order multiple: a dedicated field if the page has one; otherwise, when the
+        // tenant keeps min/max in Reorder Point / Maximum Inventory (this one does),
+        // Minimum_Order_Quantity holds the lot size (e.g. DB = 2,304 both places).
+        const fMultEff = fMult || (!useOrd ? fMinOrd : null);
         const sku = {};
         let kept = 0;
         for (const r of rows) {
@@ -514,14 +518,16 @@ async function bcFetchLocationData() {
             const loc = String(r[fLoc] || "").trim() || "DEFAULT";
             const mn = fMin ? (parseFloat(r[fMin]) || 0) : 0;
             const mx = fMax ? (parseFloat(r[fMax]) || 0) : 0;
-            if (mn === 0 && mx === 0) continue;
+            const mult = fMultEff ? (parseFloat(r[fMultEff]) || 0) : 0;
+            if (mn === 0 && mx === 0 && mult === 0) continue;
             if (!sku[item]) sku[item] = {};
-            sku[item][loc] = { min: mn, max: mx };
+            sku[item][loc] = { min: mn, max: mx, mult: mult };
             kept++;
         }
         result.sku = sku;
         result.diagnostics.sku = rows.length + " SKUs via " + entity + ", " + kept + " with levels, using "
-            + (useOrd ? (fMinOrd + "/" + fMaxOrd) : (fReord + "/" + fMaxInv));
+            + (useOrd ? (fMinOrd + "/" + fMaxOrd) : (fReord + "/" + fMaxInv))
+            + (fMultEff ? ", multiple from " + fMultEff : ", no multiple field");
     } catch (e) {
         result.diagnostics.sku = "unavailable — " + e.message;
         console.warn("Stockkeeping-unit fetch failed:", e.message);

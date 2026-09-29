@@ -6,7 +6,7 @@
     <title>Item Demand Forecast Tool (Wiise Connected)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
-    <script src="bc-fetchers.js?v=4"></script>
+    <script src="bc-fetchers.js?v=5"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;900&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
@@ -5008,7 +5008,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         }
         function lanesVendorPick(enc) { setLanesVendor(enc ? decodeURIComponent(enc) : ''); }
         // Gauge + Status always start ON here too.
-        let plannerExtras = { gauge: true, status: true };
+        let plannerExtras = { gauge: true, status: true, minorder: false };
         function togglePlannerExtra(k) {
             plannerExtras[k] = !plannerExtras[k];
             try { localStorage.setItem('forecastPlannerExtras', JSON.stringify(plannerExtras)); } catch (e) {}
@@ -5159,6 +5159,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                     availInv: od.availInv,
                     skuMin: mm ? mm.min : null,
                     skuMax: mm ? mm.max : null,
+                    skuMult: mm ? (mm.mult || 0) : 0,
                     purchQty: od.purchQty,
                     salesQty: od.salesQty,
                     net: net,
@@ -5201,6 +5202,11 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             const dir = plannerSort.dir === 'asc' ? 1 : -1;
             const val = key === 'per' ? (r) => r[plannerPerKey()]
                 : key === 'status' ? (r) => plannerHealthOf(r).rank
+                : key === 'netMin' ? (r) => {
+                    const o = orderToMin({ availInv: r.availInv, salesQty: r.salesQty, purchQty: r.purchQty },
+                        r.skuMin != null && r.skuMin > 0 ? { min: r.skuMin, max: r.skuMax || 0, mult: r.skuMult || 0 } : null);
+                    return o ? o.buy : -1;
+                }
                 : (r) => r[key];
             if (PLANNER_TEXT_COLS[key]) {
                 rows.sort((a, b) => dir * String(val(a)).localeCompare(String(val(b))));
@@ -5269,7 +5275,9 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 // and the vendor popup carries its own copies of these chips.
                 const showExtras = s.group === 'item';
                 ch += '<div class="fgroup" style="justify-content:flex-end;">'
-                    + (showExtras ? plannerChip(!!plannerExtras.gauge, "togglePlannerExtra('gauge')", 'Stock gauge') + ' '
+                    + (showExtras ? plannerChip(!!plannerExtras.minorder, "togglePlannerExtra('minorder')", 'Order to Min')
+                        + '<span style="display:inline-block;width:14px;"></span>'
+                        + plannerChip(!!plannerExtras.gauge, "togglePlannerExtra('gauge')", 'Stock gauge') + ' '
                         + plannerChip(!!plannerExtras.status, "togglePlannerExtra('status')", 'Status') + ' ' : '')
                     + '<button type="button" class="btn btn-outline" style="padding:6px 12px;font-size:12px;" onclick="plannerExportCSV()">Export CSV</button>'
                     + '</div>';
@@ -5322,10 +5330,17 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             if (locData.sku) stockCols.push({ key: 'skuMin', label: 'Min' }, { key: 'skuMax', label: 'Max' });
             stockCols.push({ key: 'purchQty', label: 'On PO' }, { key: 'salesQty', label: 'On SO' });
             grps.push({ id: 'stock', label: 'STOCK & ORDERS', cols: stockCols });
-            grps.push({ id: 'net', label: 'NET TO PURCHASE', cols: [
-                { key: 'net', label: 'Net to Order' },
-                { key: 'per', label: plannerPerLabel() },
-            ]});
+            if (plannerExtras.minorder) {
+                grps.push({ id: 'net', label: 'NET TO PURCHASE (TO MIN)', cols: [
+                    { key: 'netMin', label: 'Order Qty' },
+                    { key: 'skuMult', label: 'Multiple' },
+                ]});
+            } else {
+                grps.push({ id: 'net', label: 'NET TO PURCHASE', cols: [
+                    { key: 'net', label: 'Net to Order' },
+                    { key: 'per', label: plannerPerLabel() },
+                ]});
+            }
             return { idCols, grps };
         }
         function plannerTableHead(withVendor) {
@@ -5382,9 +5397,22 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                    + '<td style="' + tdR + 'color:#6a1b9a;">' + (r.skuMax == null ? '-' : Math.round(r.skuMax).toLocaleString()) + '</td>';
             }
             h += '<td style="' + tdR + '">' + Math.round(r.purchQty).toLocaleString() + '</td>'
-               + '<td style="' + tdR + '">' + Math.round(r.salesQty).toLocaleString() + '</td>'
-               + '<td style="' + tdR + 'font-weight:600;">' + Math.round(r.net).toLocaleString() + '</td>'
-               + '<td style="' + tdR + 'font-weight:700;color:#e65100;">' + r[plannerPerKey()].toLocaleString() + '</td></tr>';
+               + '<td style="' + tdR + '">' + Math.round(r.salesQty).toLocaleString() + '</td>';
+            if (plannerExtras.minorder) {
+                const o = orderToMin({ availInv: r.availInv, salesQty: r.salesQty, purchQty: r.purchQty },
+                    r.skuMin != null && r.skuMin > 0 ? { min: r.skuMin, max: r.skuMax || 0, mult: r.skuMult || 0 } : null);
+                if (!o) {
+                    h += '<td style="' + tdR + 'color:#bbb;">-</td><td style="' + tdR + '"></td>';
+                } else {
+                    h += '<td style="' + tdR + 'font-weight:700;color:' + (o.buy > 0 ? '#c62828' : '#2e7d32') + ';">' + fmt(o.buy)
+                       + (o.mult && o.buy !== o.need ? '<div style="font-size:10px;color:#888;font-weight:400;">need ' + fmt(o.need) + '</div>' : '') + '</td>'
+                       + '<td style="' + tdR + 'color:#6a1b9a;">' + (o.mult ? fmt(o.mult) : '') + '</td>';
+                }
+            } else {
+                h += '<td style="' + tdR + 'font-weight:600;">' + Math.round(r.net).toLocaleString() + '</td>'
+                   + '<td style="' + tdR + 'font-weight:700;color:#e65100;">' + r[plannerPerKey()].toLocaleString() + '</td>';
+            }
+            h += '</tr>';
             return h;
         }
 
@@ -5637,7 +5665,9 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             const btn = document.getElementById('plannerVendorContainerBtn');
             if (btn) btn.style.display = (v !== '__none__' && plannerVendorHasCubage(v)) ? 'inline-block' : 'none';
             const ve = document.getElementById('plannerVendorExtras');
-            if (ve) ve.innerHTML = plannerChip(!!plannerExtras.gauge, "togglePlannerExtra('gauge')", 'Stock gauge') + ' '
+            if (ve) ve.innerHTML = plannerChip(!!plannerExtras.minorder, "togglePlannerExtra('minorder')", 'Order to Min')
+                + '<span style="display:inline-block;width:14px;"></span>'
+                + plannerChip(!!plannerExtras.gauge, "togglePlannerExtra('gauge')", 'Stock gauge') + ' '
                 + plannerChip(!!plannerExtras.status, "togglePlannerExtra('status')", 'Status');
             let html = '';
             if (rows.length === 0) {
