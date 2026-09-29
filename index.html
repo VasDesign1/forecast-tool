@@ -3388,14 +3388,14 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 const scale = mm.max * 1.25;
                 const p = (v) => Math.max(0, Math.min(100, v / scale * 100));
                 const invColor = od.availInv < mm.min ? '#c62828' : (od.availInv > mm.max ? '#6a1b9a' : '#1a237e');
-                return '<td title="' + escAttr('Inventory ' + fmt(od.availInv) + ' · Min ' + fmt(mm.min) + ' · Max ' + fmt(mm.max)) + '">'
-                    + '<div style="display:flex;align-items:center;gap:7px;">'
+                return '<td style="text-align:right;" title="' + escAttr('Inventory ' + fmt(od.availInv) + ' · Min ' + fmt(mm.min) + ' · Max ' + fmt(mm.max)) + '">'
+                    + '<div style="display:flex;align-items:center;justify-content:flex-end;gap:7px;">'
                     + '<div style="position:relative;width:64px;height:8px;background:#eef0f7;border-radius:4px;flex-shrink:0;">'
                     + '<div style="position:absolute;left:' + p(mm.min) + '%;width:' + Math.max(2, p(mm.max) - p(mm.min)) + '%;top:0;bottom:0;background:#c5cae9;border-radius:4px;"></div>'
                     + '<div style="position:absolute;left:calc(' + p(od.availInv) + '% - 3px);top:-2px;width:6px;height:12px;background:' + invColor + ';border-radius:2px;"></div>'
-                    + '</div><span style="font-weight:600;color:' + invColor + ';">' + fmt(od.availInv) + '</span></div></td>';
+                    + '</div><span style="font-weight:600;color:' + invColor + ';min-width:52px;text-align:right;">' + fmt(od.availInv) + '</span></div></td>';
             }
-            return '<td style="' + (od.availInv < 0 ? 'color:#c62828;' : '') + 'font-weight:600;">' + fmt(od.availInv) + '</td>';
+            return '<td style="text-align:right;' + (od.availInv < 0 ? 'color:#c62828;' : '') + 'font-weight:600;"><span style="display:inline-block;min-width:52px;text-align:right;">' + fmt(od.availInv) + '</span></td>';
         }
 
         // Health classification (same rules as Priority Lanes)
