@@ -140,11 +140,24 @@ async function bcFetchLedgerEntries() {
     var fItem = findField(["itemNumber", "item_number", "Item_No", "itemNo"]) || "itemNumber";
     var fQty = findField(["quantity", "Quantity"]) || "quantity";
     var fDesc = findField(["description", "Description"]) || "description";
-    var fLoc = findField(["locationCode", "location_code", "Location_Code"]) || "locationCode";
+    var fLocFound = findField(["locationCode", "location_code", "Location_Code"]);
+    var fLoc = fLocFound || "locationCode";
     var fEntry = findField(["entryType", "entry_type", "Entry_Type"]) || "entryType";
     var fDoc = findField(["documentType", "document_type", "Document_Type"]) || "documentType";
 
     console.log("Mapped ledger fields — Date:", fDate, "| Item:", fItem, "| Qty:", fQty, "| Desc:", fDesc, "| Loc:", fLoc, "| EntryType:", fEntry, "| DocType:", fDoc);
+
+    // This tenant's v2.0 itemLedgerEntries exposes NO location field, which
+    // silently filed every Wiise-era row under "DEFAULT". When that's the
+    // case, prefer the published Item Ledger Entries OData PAGE, which
+    // carries the real Location_Code.
+    if (!fLocFound) {
+        try {
+            return await bcFetchLedgerEntriesV4();
+        } catch (e) {
+            console.warn("Item-ledger page fallback unavailable (" + e.message + ") — locations will show as DEFAULT.");
+        }
+    }
 
     const entries = await bcFetchAll(
         BC_API_URL + "/companies(" + compId + ")/itemLedgerEntries?$filter="
@@ -185,6 +198,63 @@ async function bcFetchLedgerEntries() {
             loc: "Location Code",
             entryType: "Entry Type",
             docType: "Document Type",
+        }
+    };
+}
+
+// 1b) Item Ledger Entries via the published OData PAGE (real Location_Code).
+//     Same output shape as bcFetchLedgerEntries. NO $select alongside the
+//     $filter (this tenant has form: $select can silently disable $filter
+//     on some objects) and the date filter is re-applied client-side as a
+//     belt-and-braces guard.
+async function bcFetchLedgerEntriesV4() {
+    const names = await bcListODataEntities();
+    const entity = names.find(n => /itemledger/i.test(n) && !/dimension|analysis/i.test(n));
+    if (!entity) throw new Error("no item-ledger page in OData $metadata");
+    const coName = encodeURIComponent(BC_CONFIG.companyName);
+    const base = BC_ODATA_URL + "/Company('" + coName + "')/" + entity;
+    const sample = await bcFetch(base + "?$top=1");
+    const fields = (sample.value && sample.value[0]) ? Object.keys(sample.value[0]) : [];
+    const fDate = bcPickField(fields, ["Posting_Date", "postingDate"]);
+    const fItem = bcPickField(fields, ["Item_No", "itemNo", "number"]);
+    const fQty = bcPickField(fields, ["Quantity"]);
+    const fDesc = bcPickField(fields, ["Description"]);
+    const fLoc = bcPickField(fields, ["Location_Code", "locationCode"]);
+    const fEntry = bcPickField(fields, ["Entry_Type", "entryType"]);
+    const fDoc = bcPickField(fields, ["Document_Type", "documentType"]);
+    console.log("Ledger page:", entity, "| fields — Date:", fDate, "Item:", fItem, "Qty:", fQty, "Loc:", fLoc, "Entry:", fEntry, "Doc:", fDoc);
+    if (!fDate || !fItem || !fQty || !fLoc || !fEntry) throw new Error("page " + entity + " lacks required fields");
+
+    const entries = await bcFetchAll(
+        base + "?$filter=" + encodeURIComponent(fDate + " ge " + WIISE_LEDGER_FROM),
+        "Item Ledger Entries");
+
+    function decodeBcName(s) {
+        return String(s == null ? "" : s).replace(/_x([0-9A-Fa-f]{4})_/g, function(_, hex) {
+            return String.fromCharCode(parseInt(hex, 16));
+        }).trim();
+    }
+    var rows = [];
+    for (var i = 0; i < entries.length; i++) {
+        var e = entries[i];
+        var d = String(e[fDate] || "").slice(0, 10);
+        if (d && d < WIISE_LEDGER_FROM) continue;   // guard: server filter ignored
+        rows.push({
+            "Posting Date":  e[fDate],
+            "Item No.":      e[fItem],
+            "Quantity":       e[fQty],
+            "Description":    (fDesc ? e[fDesc] : "") || "",
+            "Location Code":  decodeBcName(e[fLoc]) || "DEFAULT",
+            "Entry Type":     decodeBcName(e[fEntry]),
+            "Document Type":  decodeBcName(e[fDoc]),
+        });
+    }
+    console.log("Ledger page rows:", rows.length, "| first:", JSON.stringify(rows[0] || null));
+    return {
+        rows: rows,
+        mapping: {
+            date: "Posting Date", itemNo: "Item No.", qty: "Quantity", desc: "Description",
+            loc: "Location Code", entryType: "Entry Type", docType: "Document Type",
         }
     };
 }
@@ -405,15 +475,36 @@ async function bcFetchLocationData() {
     const result = { inv: null, so: null, po: null, diagnostics: { inv: "", so: "", po: "" } };
 
     try {
+        // Prefer the v2.0 API when it exposes a location field; this tenant's
+        // doesn't, so fall through to the published Item Ledger Entries page.
         const compId = await bcGetCompanyId();
         const sample = await bcFetch(BC_API_URL + "/companies(" + compId + ")/itemLedgerEntries?$top=1");
         const fields = (sample.value && sample.value[0]) ? Object.keys(sample.value[0]) : [];
-        const fItem = bcPickField(fields, ["itemNumber", "item_number", "Item_No", "itemNo"]) || "itemNumber";
-        const fLoc = bcPickField(fields, ["locationCode", "location_code", "Location_Code"]) || "locationCode";
-        const fQty = bcPickField(fields, ["quantity", "Quantity"]) || "quantity";
-        const rows = await bcFetchAll(
-            BC_API_URL + "/companies(" + compId + ")/itemLedgerEntries?$select=" + [fItem, fLoc, fQty].join(","),
-            "Branch stock");
+        const fLoc20 = bcPickField(fields, ["locationCode", "location_code", "Location_Code"]);
+        let rows, fItem, fLoc, fQty, src;
+        if (fLoc20) {
+            fItem = bcPickField(fields, ["itemNumber", "item_number", "Item_No", "itemNo"]) || "itemNumber";
+            fLoc = fLoc20;
+            fQty = bcPickField(fields, ["quantity", "Quantity"]) || "quantity";
+            rows = await bcFetchAll(
+                BC_API_URL + "/companies(" + compId + ")/itemLedgerEntries?$select=" + [fItem, fLoc, fQty].join(","),
+                "Branch stock");
+            src = "v2.0 API";
+        } else {
+            const names = await bcListODataEntities();
+            const entity = names.find(n => /itemledger/i.test(n) && !/dimension|analysis/i.test(n));
+            if (!entity) throw new Error("v2.0 has no location field and no item-ledger page is published");
+            const coName = encodeURIComponent(BC_CONFIG.companyName);
+            const base = BC_ODATA_URL + "/Company('" + coName + "')/" + entity;
+            const pSample = await bcFetch(base + "?$top=1");
+            const pFields = (pSample.value && pSample.value[0]) ? Object.keys(pSample.value[0]) : [];
+            fItem = bcPickField(pFields, ["Item_No", "itemNo", "number"]);
+            fLoc = bcPickField(pFields, ["Location_Code", "locationCode"]);
+            fQty = bcPickField(pFields, ["Quantity"]);
+            if (!fItem || !fLoc || !fQty) throw new Error("page " + entity + " lacks item/location/quantity fields");
+            rows = await bcFetchAll(base + "?$select=" + [fItem, fLoc, fQty].join(","), "Branch stock");
+            src = "page " + entity;
+        }
         const inv = {};
         for (const r of rows) {
             const item = String(r[fItem] || "").trim();
@@ -424,7 +515,7 @@ async function bcFetchLocationData() {
             inv[item][loc] = (inv[item][loc] || 0) + q;
         }
         result.inv = inv;
-        result.diagnostics.inv = rows.length + " ledger rows summed into " + Object.keys(inv).length + " items";
+        result.diagnostics.inv = rows.length + " ledger rows (" + src + ") summed into " + Object.keys(inv).length + " items";
     } catch (e) {
         result.diagnostics.inv = "unavailable — " + e.message;
         console.warn("Branch stock fetch failed:", e.message);
