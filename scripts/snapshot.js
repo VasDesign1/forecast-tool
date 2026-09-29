@@ -114,15 +114,17 @@ function detectSlot(mel) {
     console.log("Snapshot slot " + slot + " · Melbourne " + mel.date + " " + mel.hhmm + " · ledger from " + from);
 
     const t0 = Date.now();
-    // Same three fetches, same shared code, as index.html connectToWiise().
-    const [ledger, items, vendors] = await Promise.all([
+    // Same four fetches, same shared code, as index.html connectToWiise().
+    const [ledger, items, vendors, locData] = await Promise.all([
         F.bcFetchLedgerEntries(),
         F.bcFetchItems(),
         F.bcFetchVendors(),
+        F.bcFetchLocationData(),
     ]);
     console.log("Fetched in " + ((Date.now() - t0) / 1000).toFixed(1) + "s: "
         + ledger.rows.length + " ledger rows · " + items.rows.length + " items · "
         + vendors.rows.length + " vendor links");
+    console.log("Branch data:", JSON.stringify(locData.diagnostics));
 
     // ---- Integrity checks (fail loudly rather than snapshot bad data) ----
     if (ledger.rows.length === 0) { console.error("0 ledger rows — aborting snapshot"); process.exit(1); }
@@ -148,7 +150,7 @@ function detectSlot(mel) {
             fetchedAtMelbourne: mel.date + " " + mel.hhmm,
             from, to,
         },
-        data: { ledger, items, vendors },
+        data: { ledger, items, vendors, locData },
     };
 
     const json = Buffer.from(JSON.stringify(payload), "utf8");

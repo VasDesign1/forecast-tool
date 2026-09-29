@@ -808,6 +808,22 @@
                 // Step 4: Fetch vendor mapping
                 updateBCProgress("Vendors", "Starting...");
                 var vendors = await bcFetchVendors();
+                updateBCProgressPercent(85);
+
+                // Step 4b: Per-location stock & open orders (for branch views).
+                // Failures inside fall back to company-wide figures.
+                updateBCProgress("Branch data", "Starting...");
+                locData = await bcFetchLocationData();
+                console.log("Branch data:", locData.diagnostics);
+                if (locData.inv) {
+                    let mismatches = 0;
+                    for (const it of items.rows) {
+                        const byLoc = locData.inv[it['No.']];
+                        const s = byLoc ? Object.values(byLoc).reduce((a, b) => a + b, 0) : 0;
+                        if (Math.abs(s - (it['Inventory'] || 0)) > 0.01) mismatches++;
+                    }
+                    console.log("Branch stock reconciliation vs item cards: " + mismatches + " mismatching items of " + items.rows.length);
+                }
                 updateBCProgressPercent(90);
 
                 // Step 5: Feed into existing processing functions
@@ -2061,7 +2077,12 @@
                 }
                 if (locs.length > 0) {
                     const hasUsage = locs.some(loc => (item.location_usage[loc] || 0) > 0);
-                    if (!hasUsage) return false;
+                    // Also keep items STOCKED at the branch even with no sales
+                    // there (e.g. a unit sitting at Loc 30 that only ever sold
+                    // from Loc 10) — forecast shows 0, stock shows the truth.
+                    const hasStock = locData.inv && locData.inv[item.item_no]
+                        && locs.some(loc => (locData.inv[item.item_no][loc] || 0) > 0);
+                    if (!hasUsage && !hasStock) return false;
                 }
                 if (vendor) {
                     const itemVendors = vendorMapping[item.item_no] || [];
@@ -2270,8 +2291,8 @@
             renderContainerPlanning();
         }
 
-        function getDisplayValues(item, methodOverride) {
-            const locs = selectedLocations;
+        function getDisplayValues(item, methodOverride, locsOverride) {
+            const locs = locsOverride !== undefined ? locsOverride : selectedLocations;
             const method = methodOverride || selectedForecastMethod;
 
             if (method === 'standard' || !method) {
@@ -2330,22 +2351,54 @@
             };
         }
 
+        // ---- Location-scoped stock & open orders ----
+        // Per-branch maps loaded from Wiise (branch stock from the full item
+        // ledger; open SO/PO lines per location). Empty selection → the
+        // company-wide item-card figures, exactly as before.
+        let locData = { inv: null, so: null, po: null, diagnostics: null };
+
+        function getScopedOrderData(itemNo, locsOverride) {
+            const locs = locsOverride !== undefined ? locsOverride : selectedLocations;
+            const od = orderData[itemNo] || { salesQty: 0, purchQty: 0, availInv: 0 };
+            if (!locs || locs.length === 0) {
+                return { availInv: od.availInv, salesQty: od.salesQty, purchQty: od.purchQty,
+                         exact: { inv: true, so: true, po: true } };
+            }
+            function sumLocs(map) {   // null = map not loaded (fall back)
+                if (!map) return null;
+                const byLoc = map[itemNo];
+                if (!byLoc) return 0;
+                let t = 0;
+                for (const l of locs) t += byLoc[l] || 0;
+                return t;
+            }
+            const inv = sumLocs(locData.inv);
+            const so = sumLocs(locData.so);
+            const po = sumLocs(locData.po);
+            return {
+                availInv: inv !== null ? inv : od.availInv,
+                salesQty: so !== null ? so : od.salesQty,
+                purchQty: po !== null ? po : od.purchQty,
+                exact: { inv: inv !== null, so: so !== null, po: po !== null },
+            };
+        }
+
         function getSortValue(item, col) {
             if (col === 'item_no' || col === 'description') {
                 return (item[col] || '').toLowerCase();
             }
             if (col === 'avail_inv') {
-                return (orderData[item.item_no] || {}).availInv || 0;
+                return getScopedOrderData(item.item_no).availInv || 0;
             }
             if (col === 'qty_sales_order') {
-                return (orderData[item.item_no] || {}).salesQty || 0;
+                return getScopedOrderData(item.item_no).salesQty || 0;
             }
             if (col === 'qty_purch_order') {
-                return (orderData[item.item_no] || {}).purchQty || 0;
+                return getScopedOrderData(item.item_no).purchQty || 0;
             }
             if (col.startsWith('net_')) {
                 const dv = getDisplayValues(item);
-                const od = orderData[item.item_no] || { salesQty: 0, purchQty: 0, availInv: 0 };
+                const od = getScopedOrderData(item.item_no);
                 const period = col.replace('net_', 'forecast_');
                 return Math.max(0, Math.ceil((dv[period] || 0) + od.salesQty - od.availInv - od.purchQty));
             }
@@ -2432,7 +2485,7 @@
                     html += '<td class="forecast-val fc-12m">' + fmt(dv.forecast_12m) + '</td>';
 
                     if (hasOrders) {
-                        const od = orderData[item.item_no] || { salesQty: 0, purchQty: 0, availInv: 0 };
+                        const od = getScopedOrderData(item.item_no);
                         // Net = Forecast + Sales Orders - Inventory - Purchase Orders
                         // (Sales orders consume stock, so add them; stock & incoming reduce need)
                         const calcNet = (fc) => Math.max(0, Math.ceil(fc + od.salesQty - od.availInv - od.purchQty));
@@ -2550,7 +2603,8 @@
                 rawForecast = Math.ceil(rawForecast * multiplier);
 
                 // Calculate Net to Purchase: Forecast + Sales Orders - Inventory - Purch Orders
-                const od = orderData[item.item_no] || { salesQty: 0, purchQty: 0, availInv: 0 };
+                // (location-scoped when a branch filter is active)
+                const od = getScopedOrderData(item.item_no);
                 const forecastQty = Math.max(0, Math.ceil(rawForecast + od.salesQty - od.availInv - od.purchQty));
                 if (forecastQty <= 0) continue;
 
@@ -2732,7 +2786,7 @@
                 if (!itemData) continue;
                 const dv = getDisplayValues(itemData, containerForecastMethod);
                 const monthlyAvg = dv.monthly_avg || 0;
-                const od = orderData[d.itemNo] || { salesQty: 0, purchQty: 0, availInv: 0 };
+                const od = getScopedOrderData(d.itemNo);
 
                 // Effective stock: order qty + current inventory + purch orders - sales orders
                 const effectiveStock = d.orderQty + od.availInv + od.purchQty - od.salesQty;
@@ -2758,7 +2812,7 @@
 
             let totalEffectiveStock = 0;
             for (const d of containerPlanData) {
-                const od = orderData[d.itemNo] || { salesQty: 0, purchQty: 0, availInv: 0 };
+                const od = getScopedOrderData(d.itemNo);
                 totalEffectiveStock += d.orderQty + od.availInv + od.purchQty - od.salesQty;
             }
             const overallMonths = totalMonthlyDemand > 0 ? Math.round(totalEffectiveStock / totalMonthlyDemand * 10) / 10 : 0;
@@ -3315,7 +3369,7 @@
                     html += '<button class="btn btn-primary" style="padding:10px 20px;font-size:13px;" onclick="toggleAdvForecast()">Advanced Forecast Methods</button>';
                     html += '<div id="advForecastPanel" style="display:none;margin-top:15px;">';
 
-                    const advOd = orderData[itemNo] || null;
+                    const advOd = orderData[itemNo] ? getScopedOrderData(itemNo) : null;
                     const advHasOrders = advOd && (advOd.salesQty > 0 || advOd.purchQty > 0 || advOd.availInv > 0);
                     const advCalcNet = (fc) => advOd ? Math.max(0, Math.ceil(fc + advOd.salesQty - advOd.availInv - advOd.purchQty)) : 0;
                     const advNetCards = (fc3, fc6, fc12, color) => {
@@ -3640,7 +3694,7 @@
                 html += '<div style="display:flex;gap:15px;flex-wrap:wrap;margin-top:12px;">';
                 html += '<div style="background:#b2dfdb;padding:12px 20px;border-radius:8px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#00695c;">' + customFc.toLocaleString() + '</div><div style="font-size:11px;color:#555;">Forecast ' + customMonths + 'M (' + detailMethodLabel + ')' + (pct > 0 ? ' +' + pct + '%' : '') + '</div></div>';
                 // Show custom net to purchase if order data exists
-                const od = orderData[itemNo];
+                const od = orderData[itemNo] ? getScopedOrderData(itemNo) : null;
                 if (od) {
                     const customNet = Math.max(0, Math.ceil(customFc + od.salesQty - od.availInv - od.purchQty));
                     html += '<div style="background:#ce93d8;padding:12px 20px;border-radius:8px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#4a148c;">' + customNet.toLocaleString() + '</div><div style="font-size:11px;color:#333;">Net to Purchase ' + customMonths + 'M (' + detailMethodLabel + ')' + (pct > 0 ? ' +' + pct + '%' : '') + '</div></div>';
@@ -3649,8 +3703,8 @@
             }
             html += '</div>';
 
-            // Order & inventory info if available
-            const od = orderData[itemNo];
+            // Order & inventory info if available (location-scoped when filtered)
+            const od = orderData[itemNo] ? getScopedOrderData(itemNo) : null;
             if (od) {
                 const fc3 = Math.ceil(monthlyAvg * 3 * multiplier);
                 const fc6 = Math.ceil(monthlyAvg * 6 * multiplier);
@@ -3764,13 +3818,27 @@
         // page's Container Planner (the real section is adopted into the
         // popup and returned on close, so every container button works).
         // ============================================================
-        const plannerState = { period: 'weekly', group: 'vendor', months: 6, method: 'standard', search: '', maximized: false };
+        const plannerState = { period: 'weekly', group: 'vendor', months: 6, method: 'standard', search: '', maximized: false, location: '' };
+        function plannerLocs() { return plannerState.location ? [plannerState.location] : []; }
         let plannerSearchTimer = null;
         let plannerVendorKey = null;       // vendor open in the drill-down popup
         let plannerSort = { key: 'per', dir: 'desc' };
         let plannerContainerHome = null;   // where #containerSection normally lives
         let plannerPrevVendorFilter = null;
+        let plannerPrevMainLocs = null;    // main-page location filter saved during container adoption
         let plannerVendorShowingContainer = false;
+
+        // Keep the main page's Loc buttons visually in sync after we set
+        // selectedLocations programmatically for the adopted container.
+        function syncLocButtons() {
+            const wrap = document.getElementById('locationToggles');
+            if (!wrap || !wrap.querySelectorAll) return;
+            wrap.querySelectorAll('.loc-btn').forEach(b => {
+                const loc = b.dataset.loc;
+                if (loc === 'all') b.classList.toggle('active', selectedLocations.length === 0);
+                else b.classList.toggle('active', selectedLocations.includes(loc));
+            });
+        }
         const PLANNER_METHODS = [
             { key: 'standard', label: 'Standard' },
             { key: 'wma', label: 'WMA' },
@@ -3800,6 +3868,7 @@
             plannerState.method = 'standard';
             plannerState.search = '';
             plannerState.maximized = false;
+            plannerState.location = '';
             plannerSort = { key: 'per', dir: 'desc' };
         }
         function setPlannerOpt(key, value) {
@@ -3855,15 +3924,16 @@
             const months = plannerState.months;
             const weeks = plannerWeeks(months);
             const rows = [];
+            const pLocs = plannerLocs();
             for (const d of allData) {
-                const dv = getDisplayValues(d, plannerState.method);
+                const dv = getDisplayValues(d, plannerState.method, pLocs);
                 let forecast = dv['forecast_' + months + 'm'];
                 if (forecast == null) forecast = Math.ceil((dv.monthly_avg || 0) * months);
                 if (!isFinite(forecast) || forecast < 0) forecast = 0;
                 // NOTE: zero forecast does NOT skip the item — committed sales
                 // orders alone can still demand stock (net > 0), matching the
                 // Container Planner's netting.
-                const od = orderData[d.item_no] || { salesQty: 0, purchQty: 0, availInv: 0 };
+                const od = getScopedOrderData(d.item_no, pLocs);
                 const net = Math.max(0, forecast + od.salesQty - od.availInv - od.purchQty);
                 if (net <= 0) continue;
                 const vendors = vendorMapping[d.item_no] || [];
@@ -3942,6 +4012,12 @@
             ch += '<span><strong style="color:#555;">Group by:</strong> '
                 + plannerChip(s.group === 'vendor', "setPlannerOpt('group','vendor')", 'Vendor') + ' '
                 + plannerChip(s.group === 'item', "setPlannerOpt('group','item')", 'Item') + '</span>';
+            if (allLocationsList.length > 0) {
+                ch += '<span><strong style="color:#555;">Location:</strong> '
+                    + plannerChip(s.location === '', "setPlannerOpt('location','')", 'All') + ' '
+                    + allLocationsList.map(l => plannerChip(s.location === l, "setPlannerOpt('location','" + escAttr(l) + "')", 'Loc ' + esc(l))).join(' ')
+                    + '</span>';
+            }
             ch += '<span><strong style="color:#555;">Horizon:</strong> '
                 + plannerChip(months === 3, "setPlannerOpt('months','3')", '3M') + ' '
                 + plannerChip(months === 6, "setPlannerOpt('months','6')", '6M') + ' '
@@ -3957,6 +4033,15 @@
             ch += '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:12px;font-size:12px;">';
             ch += '<input type="text" id="plannerSearch" placeholder="' + (s.group === 'vendor' ? 'Search vendors...' : 'Search item no. or description...') + '" value="' + escAttr(s.search) + '" oninput="plannerSearchInput(this.value)"'
                 + ' style="flex:1;min-width:220px;max-width:420px;padding:7px 12px;border:1px solid #ccc;border-radius:6px;font-size:12px;">';
+            if (s.location) {
+                const missing = [];
+                if (!locData.inv) missing.push('branch stock');
+                if (!locData.so) missing.push('branch sales orders');
+                if (!locData.po) missing.push('branch purchase orders');
+                ch += missing.length === 0
+                    ? '<span style="font-size:11px;color:#2e7d32;">Showing Loc ' + esc(s.location) + ' only — stock, SO and PO are per-branch.</span>'
+                    : '<span style="font-size:11px;color:#e65100;">Loc ' + esc(s.location) + ': ' + esc(missing.join(', ')) + ' unavailable — using company-wide figures for those.</span>';
+            }
             ch += '</div>';
             document.getElementById('plannerControls').innerHTML = ch;
         }
@@ -4011,10 +4096,11 @@
             const totalPer = rows.reduce((a, r) => a + r[perKey], 0);
 
             // Summary tiles live in the pinned head, above the scroll area.
+            const locTag = s.location ? ' · Loc ' + esc(s.location) : '';
             let sm = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;">';
-            sm += '<div style="background:#e8eaf6;padding:8px 16px;border-radius:8px;text-align:center;"><div style="font-size:17px;font-weight:700;color:#1a237e;">' + rows.length.toLocaleString() + '</div><div style="font-size:10px;color:#666;">Items to Order</div></div>';
-            sm += '<div style="background:#e8f5e9;padding:8px 16px;border-radius:8px;text-align:center;"><div style="font-size:17px;font-weight:700;color:#2e7d32;">' + Math.round(totalNet).toLocaleString() + '</div><div style="font-size:10px;color:#666;">Net Units over ' + months + 'M</div></div>';
-            sm += '<div style="background:#fff3e0;padding:8px 16px;border-radius:8px;text-align:center;"><div style="font-size:17px;font-weight:700;color:#e65100;">' + Math.round(totalPer).toLocaleString() + '</div><div style="font-size:10px;color:#666;">Units ' + (s.period === 'weekly' ? 'per Week (' + weeks + ' weeks)' : 'per Month') + '</div></div>';
+            sm += '<div style="background:#e8eaf6;padding:8px 16px;border-radius:8px;text-align:center;"><div style="font-size:17px;font-weight:700;color:#1a237e;">' + rows.length.toLocaleString() + '</div><div style="font-size:10px;color:#666;">Items to Order' + locTag + '</div></div>';
+            sm += '<div style="background:#e8f5e9;padding:8px 16px;border-radius:8px;text-align:center;"><div style="font-size:17px;font-weight:700;color:#2e7d32;">' + Math.round(totalNet).toLocaleString() + '</div><div style="font-size:10px;color:#666;">Net Units over ' + months + 'M' + locTag + '</div></div>';
+            sm += '<div style="background:#fff3e0;padding:8px 16px;border-radius:8px;text-align:center;"><div style="font-size:17px;font-weight:700;color:#e65100;">' + Math.round(totalPer).toLocaleString() + '</div><div style="font-size:10px;color:#666;">Units ' + (s.period === 'weekly' ? 'per Week (' + weeks + ' weeks)' : 'per Month') + locTag + '</div></div>';
             sm += '</div>';
             document.getElementById('plannerSummary').innerHTML = sm;
 
@@ -4092,7 +4178,8 @@
             document.getElementById('plannerVendorTitle').textContent = label;
             document.getElementById('plannerVendorStats').innerHTML =
                 '<strong>' + rows.length + '</strong> items · <strong style="color:#e65100;">' + Math.round(subPer).toLocaleString() + '</strong> units ' + (s.period === 'weekly' ? 'per week' : 'per month')
-                + ' · <strong>' + Math.round(subNet).toLocaleString() + '</strong> net over ' + s.months + ' months (' + PLANNER_METHODS.find(m => m.key === s.method).label + ' method)';
+                + ' · <strong>' + Math.round(subNet).toLocaleString() + '</strong> net over ' + s.months + ' months (' + PLANNER_METHODS.find(m => m.key === s.method).label + ' method)'
+                + (s.location ? ' · <strong style="color:#1a237e;">Loc ' + esc(s.location) + ' only</strong>' : '');
             // Container Planner only for container (overseas) vendors — i.e.
             // vendors with at least one item carrying cubage (CBM) data.
             const btn = document.getElementById('plannerVendorContainerBtn');
@@ -4126,7 +4213,11 @@
                 plannerContainerHome = { parent: section.parentNode, next: section.nextSibling };
             }
             plannerPrevVendorFilter = selectedVendor;
-            selectVendor(plannerVendorKey);   // filters main data → container plan builds for this vendor
+            // Carry the planner's location choice into the container plan too.
+            plannerPrevMainLocs = selectedLocations.slice();
+            selectedLocations = plannerLocs();
+            syncLocButtons();
+            selectVendor(plannerVendorKey);   // filters main data (vendor + location) → container plan builds
             document.getElementById('plannerVendorContainerHost').appendChild(section);
             document.getElementById('plannerVendorContainerHost').style.display = 'flex';
             document.getElementById('plannerVendorContent').style.display = 'none';
@@ -4155,10 +4246,19 @@
             scrollEl.style.display = '';
             scrollEl.style.flexDirection = '';
             plannerVendorShowingContainer = false;
+            let needRefilter = false;
+            if (plannerPrevMainLocs !== null) {
+                selectedLocations = plannerPrevMainLocs;
+                plannerPrevMainLocs = null;
+                syncLocButtons();
+                needRefilter = true;
+            }
             if (plannerPrevVendorFilter !== null && plannerPrevVendorFilter !== selectedVendor) {
-                selectVendor(plannerPrevVendorFilter);
+                selectVendor(plannerPrevVendorFilter);   // runs applyFilters itself
+                needRefilter = false;
             }
             plannerPrevVendorFilter = null;
+            if (needRefilter) applyFilters();
             const btn = document.getElementById('plannerVendorContainerBtn');
             if (btn) btn.textContent = 'Container Planner';
         }
@@ -4190,14 +4290,14 @@
             const rows = plannerFilteredRows();
             if (rows.length === 0) { alert('Nothing to order.'); return; }
             rows.sort((a, b) => (a.vendorNo || 'zzz').localeCompare(b.vendorNo || 'zzz') || b[perKey] - a[perKey]);
-            plannerDownloadCSV(plannerBuildCSV(rows), 'order-planner-' + s.period + '-' + s.months + 'm-' + s.method + '.csv');
+            plannerDownloadCSV(plannerBuildCSV(rows), 'order-planner-' + s.period + '-' + s.months + 'm-' + s.method + (s.location ? '-loc' + s.location : '') + '.csv');
         }
         function plannerVendorExportCSV() {
             const s = plannerState;
             const rows = plannerSortRows(plannerVendorRows());
             if (rows.length === 0) { alert('Nothing to order from this vendor.'); return; }
             const tag = plannerVendorKey === '__none__' ? 'no-vendor' : plannerVendorKey;
-            plannerDownloadCSV(plannerBuildCSV(rows), 'order-planner-' + tag + '-' + s.period + '-' + s.months + 'm-' + s.method + '.csv');
+            plannerDownloadCSV(plannerBuildCSV(rows), 'order-planner-' + tag + '-' + s.period + '-' + s.months + 'm-' + s.method + (s.location ? '-loc' + s.location : '') + '.csv');
         }
 
         function exportCSV() {
@@ -4210,7 +4310,7 @@
 
             const hasOrders = Object.keys(orderData).length > 0;
             if (hasOrders) {
-                headers.push('Inventory', 'Qty on Sales Order', 'Qty on Purch. Order', 'Net to Purchase 3M', 'Net to Purchase 6M', 'Net to Purchase 12M');
+                headers.push('Inventory' + locLabel, 'Qty on Sales Order' + locLabel, 'Qty on Purch. Order' + locLabel, 'Net to Purchase 3M' + locLabel, 'Net to Purchase 6M' + locLabel, 'Net to Purchase 12M' + locLabel);
             }
 
             function csvSafe(s) {
@@ -4228,7 +4328,7 @@
                     dv.forecast_3m, dv.forecast_6m, dv.forecast_12m,
                 ];
                 if (hasOrders) {
-                    const od = orderData[item.item_no] || { salesQty: 0, purchQty: 0, availInv: 0 };
+                    const od = getScopedOrderData(item.item_no);
                     const calcNet = (fc) => Math.max(0, Math.ceil(fc + od.salesQty - od.availInv - od.purchQty));
                     row.push(
                         od.availInv, od.salesQty, od.purchQty,
@@ -4649,6 +4749,8 @@
 
         async function hydrateSnapshot(payload) {
             var d = payload.data;
+            // Older snapshots predate branch data — fall back to company-wide.
+            locData = d.locData || { inv: null, so: null, po: null, diagnostics: null };
             wiiseLedgerCache = d.ledger;
             await ensureNavSafe();
             applyLedgerRows();

@@ -317,12 +317,150 @@ async function bcFetchVendors() {
     return { rows: [], mapping: { itemNo: "No.", vendorNo: "Vendor No.", vendorName: "Vendor Name" } };
 }
 
+// ---- OData v4 entity discovery ($metadata) ----
+// Never hardcode published page names — tenants differ. Cached per session.
+let _bcODataEntities = null;
+async function bcListODataEntities() {
+    if (_bcODataEntities) return _bcODataEntities;
+    const token = await bcGetToken();
+    const resp = await fetch(BC_ODATA_URL + "/$metadata", { headers: { "Authorization": "Bearer " + token } });
+    if (!resp.ok) throw new Error("$metadata HTTP " + resp.status);
+    const xml = await resp.text();
+    const names = [];
+    const re = /<EntitySet\s+Name="([^"]+)"/g;
+    let m;
+    while ((m = re.exec(xml))) names.push(m[1]);
+    _bcODataEntities = names;
+    return names;
+}
+
+function bcPickField(fields, candidates) {
+    for (var c = 0; c < candidates.length; c++) {
+        var lower = candidates[c].toLowerCase();
+        for (var f = 0; f < fields.length; f++) {
+            if (fields[f].toLowerCase() === lower) return fields[f];
+        }
+    }
+    for (var c = 0; c < candidates.length; c++) {
+        var lower = candidates[c].toLowerCase();
+        for (var f = 0; f < fields.length; f++) {
+            if (fields[f].toLowerCase().indexOf(lower) !== -1) return fields[f];
+        }
+    }
+    return "";
+}
+
+// Outstanding document-line quantities summed per item per location.
+// kind: array of regexes tried in order against published entity names;
+// exclude: names matching this never qualify (invoices, receipts, ...).
+async function bcFetchOutstandingByLoc(kind, exclude, label) {
+    const names = await bcListODataEntities();
+    let entity = null;
+    for (const re of kind) {
+        entity = names.find(n => re.test(n) && !exclude.test(n));
+        if (entity) break;
+    }
+    if (!entity) throw new Error("no matching entity published in OData $metadata");
+    const coName = encodeURIComponent(BC_CONFIG.companyName);
+    const base = BC_ODATA_URL + "/Company('" + coName + "')/" + entity;
+    const sample = await bcFetch(base + "?$top=1");
+    const fields = (sample.value && sample.value[0]) ? Object.keys(sample.value[0]) : [];
+    const fDocType = bcPickField(fields, ["documentType", "Document_Type"]);
+    const fItem = bcPickField(fields, ["number", "itemNo", "no", "Item_No"]);
+    const fLoc = bcPickField(fields, ["locationCode", "Location_Code"]);
+    const fOut = bcPickField(fields, ["outstandingQuantity", "Outstanding_Quantity", "Outstanding_Qty_Base"]);
+    const fType = bcPickField(fields, ["lineType", "type"]);
+    console.log(label + " entity:", entity, "| fields — docType:", fDocType, "item:", fItem, "loc:", fLoc, "outstanding:", fOut, "type:", fType);
+    if (!fItem || !fOut) throw new Error("entity " + entity + " lacks item/outstanding fields");
+    let filter = fOut + " gt 0";
+    if (fDocType) filter = fDocType + " eq 'Order' and " + filter;
+    const rows = await bcFetchAll(base + "?$filter=" + encodeURIComponent(filter), label);
+    const map = {};
+    let kept = 0;
+    for (const r of rows) {
+        if (fType && String(r[fType] || "").toLowerCase() !== "item") continue;
+        const item = String(r[fItem] || "").trim();
+        if (!item) continue;
+        const loc = (fLoc ? String(r[fLoc] || "").trim() : "") || "DEFAULT";
+        const q = parseFloat(r[fOut]) || 0;
+        if (q === 0) continue;
+        if (!map[item]) map[item] = {};
+        map[item][loc] = (map[item][loc] || 0) + q;
+        kept++;
+    }
+    return { map: map, entity: entity, rows: rows.length, kept: kept };
+}
+
+// 4) Per-location data for branch-aware inventory and ordering:
+//    inv — branch stock: EVERY ledger entry's quantity summed per
+//          item+location. The tenant's ledger starts at go-live with
+//          opening balances, so these sums equal Wiise's Items-by-Location.
+//          Slim $select, NO $filter (the filter-drop trap needs a $filter
+//          to bite; a full scan with $select is safe either way).
+//    so / po — outstanding sales/purchase order line quantities per
+//          item+location via discovered OData entities.
+// Each part fails independently: a null map means "fall back to the
+// company-wide item-card figure" and the diagnostic says why.
+async function bcFetchLocationData() {
+    const result = { inv: null, so: null, po: null, diagnostics: { inv: "", so: "", po: "" } };
+
+    try {
+        const compId = await bcGetCompanyId();
+        const sample = await bcFetch(BC_API_URL + "/companies(" + compId + ")/itemLedgerEntries?$top=1");
+        const fields = (sample.value && sample.value[0]) ? Object.keys(sample.value[0]) : [];
+        const fItem = bcPickField(fields, ["itemNumber", "item_number", "Item_No", "itemNo"]) || "itemNumber";
+        const fLoc = bcPickField(fields, ["locationCode", "location_code", "Location_Code"]) || "locationCode";
+        const fQty = bcPickField(fields, ["quantity", "Quantity"]) || "quantity";
+        const rows = await bcFetchAll(
+            BC_API_URL + "/companies(" + compId + ")/itemLedgerEntries?$select=" + [fItem, fLoc, fQty].join(","),
+            "Branch stock");
+        const inv = {};
+        for (const r of rows) {
+            const item = String(r[fItem] || "").trim();
+            if (!item) continue;
+            const loc = String(r[fLoc] || "").trim() || "DEFAULT";
+            const q = parseFloat(r[fQty]) || 0;
+            if (!inv[item]) inv[item] = {};
+            inv[item][loc] = (inv[item][loc] || 0) + q;
+        }
+        result.inv = inv;
+        result.diagnostics.inv = rows.length + " ledger rows summed into " + Object.keys(inv).length + " items";
+    } catch (e) {
+        result.diagnostics.inv = "unavailable — " + e.message;
+        console.warn("Branch stock fetch failed:", e.message);
+    }
+
+    try {
+        const so = await bcFetchOutstandingByLoc(
+            [/^salesdocumentlines?$/i, /salesdocument.*line/i, /sales.*doc.*line/i],
+            /invoice|shipment|credit|archive|quote/i, "Open SO lines");
+        result.so = so.map;
+        result.diagnostics.so = so.kept + " open order lines via " + so.entity;
+    } catch (e) {
+        result.diagnostics.so = "unavailable — " + e.message;
+        console.warn("Open SO lines fetch failed:", e.message);
+    }
+
+    try {
+        const po = await bcFetchOutstandingByLoc(
+            [/^purchasedocumentlines?$/i, /purchasedocument.*line/i, /purch.*doc.*line/i, /purchase.*line/i],
+            /invoice|receipt|credit|archive|quote/i, "Open PO lines");
+        result.po = po.map;
+        result.diagnostics.po = po.kept + " open order lines via " + po.entity;
+    } catch (e) {
+        result.diagnostics.po = "unavailable — " + e.message;
+        console.warn("Open PO lines fetch failed:", e.message);
+    }
+
+    return result;
+}
+
 // Node (snapshot robot) — browsers ignore this block.
 if (typeof module !== "undefined" && module.exports) {
     module.exports = {
         BC_CONFIG, BC_TENANT_DOMAIN, BC_API_BASE, BC_API_URL, BC_ODATA_URL, SP_CONFIG, GRAPH_SCOPES,
         WIISE_LEDGER_FROM,
         bcFetch, bcFetchAll, bcGetCompanyId, bcResetCompanyId,
-        bcFetchLedgerEntries, bcFetchItems, bcFetchVendors,
+        bcFetchLedgerEntries, bcFetchItems, bcFetchVendors, bcFetchLocationData,
     };
 }
