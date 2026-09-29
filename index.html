@@ -3336,12 +3336,6 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             try { localStorage.setItem('forecastTableExtras', JSON.stringify(tableExtras)); } catch (e) {}
             renderTable();
         }
-        let expandedRows = new Set();
-        function toggleRowExpand(encNo) {
-            const k = decodeURIComponent(encNo);
-            if (expandedRows.has(k)) expandedRows.delete(k); else expandedRows.add(k);
-            renderTable();
-        }
         // Inventory cell — plain number, or a min/max stock gauge when enabled.
         // Shared by the main table and the Order Planner tables.
         function invCellHtml(od, mm, useGauge) {
@@ -3370,48 +3364,6 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             if (r.net6 > 0 && cover < 3) return { key: 'watch', label: 'WATCH', color: '#e65100', rank: 1, cover };
             return { key: 'ok', label: 'OK', color: '#2e7d32', rank: 2, cover };
         }
-        function sparkHtml(item) {
-            const ms = Object.keys(item.months_data || {}).sort().slice(-12);
-            if (ms.length === 0) return '-';
-            const vs = ms.map(m => Math.max(0, item.months_data[m] || 0));
-            const mx = Math.max(1, ...vs);
-            const tip = ms.map((m, i) => m + ': ' + fmt(vs[i])).join('  ·  ');
-            let h = '<div title="' + escAttr(tip) + '" style="display:flex;align-items:flex-end;gap:1px;height:18px;">';
-            for (const v of vs) h += '<div style="width:4px;background:#5c6bc0;border-radius:1px 1px 0 0;height:' + Math.max(2, Math.round(v / mx * 18)) + 'px;"></div>';
-            return h + '</div>';
-        }
-        function expandStripHtml(item, r) {
-            const ms = Object.keys(item.months_data || {}).sort().slice(-6);
-            let h = '<div style="padding:8px 10px;background:#f8f9ff;border-bottom:2px solid #e0e3f0;">';
-            h += '<span style="font-size:11px;color:#888;margin-right:6px;">Last months:</span>';
-            for (const m of ms) h += chip(esc(m.slice(2)), fmt(Math.max(0, item.months_data[m] || 0)));
-            const lu = item.location_usage || {};
-            const lKeys = Object.keys(lu).filter(l => lu[l] > 0).sort();
-            if (lKeys.length) {
-                h += '<span style="font-size:11px;color:#888;margin:0 6px 0 14px;">Usage by branch:</span>';
-                for (const l of lKeys) h += chip('Loc ' + esc(l), fmt(lu[l]), '#00695c');
-            }
-            if (r.od) {
-                h += '<span style="font-size:11px;color:#888;margin:0 6px 0 14px;">Net to order:</span>'
-                   + chip('3M', fmt(r.net3), '#e65100') + chip('6M', fmt(r.net6), '#e65100') + chip('12M', fmt(r.net12), '#e65100');
-            }
-            return h + '</div>';
-        }
-
-        // Table style modes — pure CSS skins over the same table, remembered per device.
-        function setTableStyle(v) {
-            try { localStorage.setItem('forecastTableStyle', v); } catch (e) {}
-            const c = document.getElementById('tableContainer');
-            if (c) c.setAttribute('data-tstyle', v);
-        }
-        (function initTableStyle() {
-            let v = 'classic';
-            try { v = localStorage.getItem('forecastTableStyle') || 'classic'; } catch (e) {}
-            const sel = document.getElementById('tableStyleSel');
-            if (sel) sel.value = v;
-            setTableStyle(v);
-        })();
-
         function renderTable() {
             const pageSize = parseInt(document.getElementById('pageSize').value);
             const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
@@ -4135,21 +4087,6 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
 
         // ================= ALTERNATE VIEWS =================
         // Same data and maths as the table — different presentations.
-        let viewMode = 'table';
-        try { viewMode = localStorage.getItem('forecastViewMode') || 'table'; } catch (e) {}
-        function setViewMode(v) {
-            viewMode = v;
-            try { localStorage.setItem('forecastViewMode', v); } catch (e) {}
-            const sel = document.getElementById('viewModeSel');
-            if (sel) sel.value = v;
-            renderTable();
-        }
-        (function initViewMode() {
-            const sel = document.getElementById('viewModeSel');
-            if (sel) sel.value = viewMode;
-        })();
-
-        let focusItemNo = null;
         function rowStats(item) {
             const dv = getDisplayValues(item);
             const od = Object.keys(orderData).length > 0 ? getScopedOrderData(item.item_no) : null;
@@ -4157,162 +4094,6 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             const net = (fc) => od ? Math.max(0, Math.ceil(fc + od.salesQty - od.availInv - od.purchQty)) : 0;
             return { dv, od, mm, net3: net(dv.forecast_3m), net6: net(dv.forecast_6m), net12: net(dv.forecast_12m) };
         }
-        function chip(label, value, color) {
-            return '<span style="display:inline-block;background:#f4f5fb;border:1px solid #e3e6f2;border-radius:6px;padding:2px 8px;margin:2px 4px 2px 0;font-size:11px;color:#555;">' + label + ' <strong style="color:' + (color || '#1a237e') + ';">' + value + '</strong></span>';
-        }
-        const ALT_EMPTY = '<div style="text-align:center;padding:30px;color:#999;">No matching items</div>';
-
-        function renderAltView(pageData) {
-            const el = document.getElementById('altView');
-            if (!el) return;
-            if (viewMode === 'cards') el.innerHTML = renderCardsView(pageData);
-            else if (viewMode === 'list') el.innerHTML = renderListView(pageData);
-            else if (viewMode === 'focus') el.innerHTML = renderFocusView(pageData);
-            else if (viewMode === 'lanes') el.innerHTML = renderLanesView();
-            else el.innerHTML = '';
-        }
-
-        // --- Cards: one tile per item, headline forecast + net, stat chips ---
-        function renderCardsView(pageData) {
-            if (pageData.length === 0) return ALT_EMPTY;
-            let h = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:12px;padding-top:8px;">';
-            for (const item of pageData) {
-                const s = rowStats(item);
-                h += '<div style="border:1px solid #e0e3f0;border-radius:12px;padding:12px 14px;background:white;box-shadow:0 1px 4px rgba(26,35,126,0.06);cursor:pointer;" onclick="showItemDetail(\'' + escJS(item.item_no) + '\')">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">'
-                  + '<span style="font-weight:700;color:#1a237e;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(item.item_no) + '</span>'
-                  + '<span style="font-size:11px;color:#888;white-space:nowrap;">' + fmt(s.dv.monthly_avg) + '/mo</span></div>'
-                  + '<div style="font-size:11px;color:#777;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:2px 0 10px;">' + esc(item.description || '') + '&nbsp;</div>'
-                  + '<div style="display:flex;gap:16px;margin-bottom:8px;">'
-                  + '<div><div style="font-size:20px;font-weight:700;color:#2e7d32;">' + fmt(s.dv.forecast_6m) + '</div><div style="font-size:9px;color:#888;">FORECAST 6M</div></div>'
-                  + (s.od ? '<div><div style="font-size:20px;font-weight:700;color:#e65100;">' + fmt(s.net6) + '</div><div style="font-size:9px;color:#888;">NET TO ORDER 6M</div></div>' : '')
-                  + '</div>'
-                  + (s.od ? '<div>' + chip('Inv', fmt(s.od.availInv))
-                      + (s.mm ? chip('Min', fmt(s.mm.min), '#6a1b9a') + chip('Max', fmt(s.mm.max), '#6a1b9a') : '')
-                      + chip('SO', fmt(s.od.salesQty), '#1565c0') + chip('PO', fmt(s.od.purchQty), '#2e7d32') + '</div>' : '')
-                  + '</div>';
-            }
-            return h + '</div>';
-        }
-
-        // --- List: two-line rows, never scrolls sideways ---
-        function renderListView(pageData) {
-            if (pageData.length === 0) return ALT_EMPTY;
-            let h = '<div style="padding-top:4px;">';
-            for (const item of pageData) {
-                const s = rowStats(item);
-                h += '<div style="border-bottom:1px solid #eee;padding:10px 4px;cursor:pointer;" onclick="showItemDetail(\'' + escJS(item.item_no) + '\')">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:14px;">'
-                  + '<div style="min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><span style="font-weight:700;color:#1a237e;">' + esc(item.item_no) + '</span> <span style="color:#777;font-size:12px;">' + esc(item.description || '') + '</span></div>'
-                  + (s.od ? '<div style="white-space:nowrap;"><span style="font-size:17px;font-weight:700;color:#e65100;">' + fmt(s.net6) + '</span> <span style="font-size:10px;color:#888;">net 6M</span></div>' : '')
-                  + '</div><div style="margin-top:4px;">'
-                  + chip('Avg/mo', fmt(s.dv.monthly_avg)) + chip('F3M', fmt(s.dv.forecast_3m), '#2e7d32') + chip('F6M', fmt(s.dv.forecast_6m), '#e65100') + chip('F12M', fmt(s.dv.forecast_12m), '#c62828')
-                  + (s.od ? chip('Inv', fmt(s.od.availInv))
-                      + (s.mm ? chip('Min–Max', fmt(s.mm.min) + '–' + fmt(s.mm.max), '#6a1b9a') : '')
-                      + chip('SO', fmt(s.od.salesQty), '#1565c0') + chip('PO', fmt(s.od.purchQty), '#2e7d32')
-                      + chip('Net 3M', fmt(s.net3), '#e65100') + chip('Net 12M', fmt(s.net12), '#e65100') : '')
-                  + '</div></div>';
-            }
-            return h + '</div>';
-        }
-
-        // --- Focus: master list on the left, one item's dashboard on the right ---
-        function focusSelect(encNo) {
-            focusItemNo = decodeURIComponent(encNo);
-            renderTable();
-        }
-        function renderFocusView(pageData) {
-            if (pageData.length === 0) return ALT_EMPTY;
-            if (!focusItemNo || !pageData.find(i => i.item_no === focusItemNo)) focusItemNo = pageData[0].item_no;
-            let list = '<div style="width:280px;flex-shrink:0;max-height:64vh;overflow-y:auto;border-right:1px solid #eee;">';
-            for (const it of pageData) {
-                const s = rowStats(it);
-                const sel = it.item_no === focusItemNo;
-                list += '<div onclick="focusSelect(\'' + encodeURIComponent(it.item_no).replace(/'/g, '%27') + '\')" style="padding:8px 12px;cursor:pointer;border-left:3px solid ' + (sel ? '#1a237e' : 'transparent') + ';background:' + (sel ? '#eef0fb' : 'transparent') + ';border-bottom:1px solid #f4f4f4;">'
-                    + '<div style="display:flex;justify-content:space-between;gap:8px;"><span style="font-weight:600;color:#1a237e;font-size:12px;">' + esc(it.item_no) + '</span>'
-                    + (s.od ? '<span style="font-size:12px;font-weight:700;color:#e65100;">' + fmt(s.net6) + '</span>' : '') + '</div>'
-                    + '<div style="font-size:10px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(it.description || '') + '</div></div>';
-            }
-            list += '</div>';
-            const item = pageData.find(i => i.item_no === focusItemNo);
-            const s = rowStats(item);
-            const months = Object.keys(item.months_data || {}).sort().slice(-12);
-            const vals = months.map(m => Math.max(0, item.months_data[m] || 0));
-            const mx = Math.max(1, ...vals);
-            let bars = '<div style="display:flex;align-items:flex-end;gap:4px;height:90px;margin:8px 0 4px;max-width:640px;">';
-            months.forEach((m, i) => {
-                bars += '<div title="' + esc(m) + ': ' + fmt(vals[i]) + '" style="flex:1;background:linear-gradient(180deg,#5c6bc0,#1a237e);border-radius:3px 3px 0 0;height:' + Math.max(3, Math.round(vals[i] / mx * 86)) + 'px;"></div>';
-            });
-            bars += '</div><div style="display:flex;gap:4px;font-size:8px;color:#999;max-width:640px;">' + months.map(m => '<div style="flex:1;text-align:center;">' + esc(m.slice(5)) + '</div>').join('') + '</div>';
-            const tile = (v, l, c, bg) => '<div style="background:' + bg + ';padding:10px 16px;border-radius:8px;text-align:center;"><div style="font-size:18px;font-weight:700;color:' + c + ';">' + v + '</div><div style="font-size:9px;color:#666;">' + l + '</div></div>';
-            let panel = '<div style="flex:1;min-width:0;padding:4px 0 4px 18px;">'
-                + '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;"><h3 style="color:#1a237e;font-size:16px;">' + esc(item.item_no) + '</h3>'
-                + '<button class="btn btn-outline" style="padding:4px 12px;font-size:11px;" onclick="showItemDetail(\'' + escJS(item.item_no) + '\')">Full details</button></div>'
-                + '<div style="font-size:12px;color:#777;margin:2px 0 10px;">' + esc(item.description || '') + '</div>'
-                + '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
-                + tile(fmt(s.dv.monthly_avg), 'AVG / MONTH', '#1a237e', '#e8eaf6')
-                + tile(fmt(s.dv.forecast_3m), 'FORECAST 3M', '#2e7d32', '#e8f5e9')
-                + tile(fmt(s.dv.forecast_6m), 'FORECAST 6M', '#e65100', '#fff3e0')
-                + tile(fmt(s.dv.forecast_12m), 'FORECAST 12M', '#c62828', '#ffebee')
-                + '</div>'
-                + (s.od ? '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">'
-                    + tile(fmt(s.od.availInv), 'INVENTORY', '#1a237e', '#e8eaf6')
-                    + (s.mm ? tile(fmt(s.mm.min) + ' – ' + fmt(s.mm.max), 'MIN – MAX', '#6a1b9a', '#f3e5f5') : '')
-                    + tile(fmt(s.od.salesQty), 'ON SO', '#1565c0', '#e3f2fd')
-                    + tile(fmt(s.od.purchQty), 'ON PO', '#2e7d32', '#e8f5e9')
-                    + tile(fmt(s.net6), 'NET TO ORDER 6M', '#e65100', '#fff3e0')
-                    + '</div>' : '')
-                + '<div style="font-size:11px;color:#888;margin-top:14px;">Monthly usage (last ' + months.length + ' months)</div>' + bars
-                + '</div>';
-            return '<div style="display:flex;padding-top:8px;">' + list + panel + '</div>';
-        }
-
-        // --- Priority Lanes: every filtered item sorted into urgency columns ---
-        function renderLanesView() {
-            if (filteredData.length === 0) return ALT_EMPTY;
-            const lanes = { order: [], watch: [], healthy: [], over: [] };
-            for (const item of filteredData) {
-                const s = rowStats(item);
-                if (!s.od) { lanes.healthy.push({ item, s, cover: Infinity }); continue; }
-                const monthly = s.dv.monthly_avg || 0;
-                const cover = monthly > 0 ? (s.od.availInv + s.od.purchQty - s.od.salesQty) / monthly : Infinity;
-                const overMax = s.mm && s.mm.max > 0 && s.od.availInv > s.mm.max;
-                if (overMax || (monthly > 0 && cover >= 12)) lanes.over.push({ item, s, cover });
-                else if (s.net6 > 0 && cover < 1) lanes.order.push({ item, s, cover });
-                else if (s.net6 > 0 && cover < 3) lanes.watch.push({ item, s, cover });
-                else lanes.healthy.push({ item, s, cover });
-            }
-            lanes.order.sort((a, b) => b.s.net6 - a.s.net6);
-            lanes.watch.sort((a, b) => b.s.net6 - a.s.net6);
-            lanes.over.sort((a, b) => (b.s.od ? b.s.od.availInv : 0) - (a.s.od ? a.s.od.availInv : 0));
-            const CAP = 60;
-            const defs = [
-                ['order', 'ORDER NOW', '#c62828', 'under 1 month of cover'],
-                ['watch', 'WATCH', '#e65100', '1–3 months of cover'],
-                ['healthy', 'HEALTHY', '#2e7d32', 'comfortable cover'],
-                ['over', 'OVERSTOCKED', '#6a1b9a', 'above max or 12+ months'],
-            ];
-            let h = '<div style="display:flex;gap:12px;align-items:flex-start;padding-top:8px;">';
-            for (const [key, label, color, hint] of defs) {
-                const arr = lanes[key];
-                h += '<div style="flex:1;min-width:0;background:#fafbfe;border:1px solid #e8eaf2;border-radius:10px;max-height:64vh;display:flex;flex-direction:column;">'
-                  + '<div style="padding:9px 12px;border-bottom:2px solid ' + color + ';flex-shrink:0;"><span style="font-weight:700;color:' + color + ';font-size:12px;letter-spacing:1px;">' + label + '</span> <span style="font-size:11px;color:#999;">' + arr.length + ' · ' + hint + '</span></div>'
-                  + '<div style="overflow-y:auto;padding:8px;">';
-                for (const e of arr.slice(0, CAP)) {
-                    const badge = key === 'over' ? fmt(e.s.od ? e.s.od.availInv : 0) + ' inv'
-                        : key === 'healthy' ? (isFinite(e.cover) ? (Math.round(e.cover * 10) / 10) + 'mo' : '∞')
-                        : fmt(e.s.net6) + ' net';
-                    h += '<div onclick="showItemDetail(\'' + escJS(e.item.item_no) + '\')" style="background:white;border:1px solid #eceef6;border-left:3px solid ' + color + ';border-radius:8px;padding:7px 10px;margin-bottom:6px;cursor:pointer;">'
-                      + '<div style="display:flex;justify-content:space-between;gap:8px;"><span style="font-weight:600;color:#1a237e;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(e.item.item_no) + '</span>'
-                      + '<span style="font-size:11px;color:' + color + ';font-weight:700;white-space:nowrap;">' + badge + '</span></div>'
-                      + '<div style="font-size:10px;color:#999;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(e.item.description || '') + '</div></div>';
-                }
-                if (arr.length > CAP) h += '<div style="text-align:center;font-size:11px;color:#999;padding:4px;">+' + (arr.length - CAP) + ' more — narrow the filters</div>';
-                h += '</div></div>';
-            }
-            return h + '</div>';
-        }
-
         function fmt(n) {
             return Number(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 1 });
         }
@@ -6018,8 +5799,6 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                     closePlannerVendor();
                 } else if (document.getElementById('plannerModal').classList.contains('active')) {
                     closePlanner();
-                } else if (document.getElementById('detailModal').classList.contains('active')) {
-                    closeDetail();
                 }
             }
         });
