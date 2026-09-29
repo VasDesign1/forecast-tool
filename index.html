@@ -6,7 +6,7 @@
     <title>Item Demand Forecast Tool (Wiise Connected)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
-    <script src="bc-fetchers.js"></script>
+    <script src="bc-fetchers.js?v=3"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;900&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
@@ -4985,6 +4985,28 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             setLanesVendor(hit || '');
         }
         let lanesVendorKeys = [];
+        let lanesVendCount = {};
+        // Custom dropdown (same look as the main vendor search, aligned under the box)
+        function lanesVendorDD(q) {
+            const dd = document.getElementById('lanesVendorDD');
+            if (!dd) return;
+            q = String(q || '').trim().toLowerCase();
+            const label = (vk) => vk === '__none__' ? 'No vendor assigned' : vendorDisplayLabel(vk);
+            let opts = '<div class="vendor-option" onmousedown="event.preventDefault()" onclick="lanesVendorPick(\'\')"><strong>All vendors</strong></div>';
+            for (const vk of lanesVendorKeys) {
+                const lbl = label(vk);
+                if (q && lbl.toLowerCase().indexOf(q) === -1) continue;
+                opts += '<div class="vendor-option' + (lanesVendor === vk ? ' selected' : '') + '" onmousedown="event.preventDefault()"'
+                    + ' onclick="lanesVendorPick(\'' + encodeURIComponent(vk).replace(/'/g, '%27') + '\')">'
+                    + esc(lbl) + ' <span style="opacity:0.6;font-size:11px;">(' + (lanesVendCount[vk] || 0) + ' items)</span></div>';
+            }
+            dd.innerHTML = opts;
+            dd.style.display = 'block';
+        }
+        function lanesVendorDDClose() {
+            setTimeout(() => { const dd = document.getElementById('lanesVendorDD'); if (dd) dd.style.display = 'none'; }, 150);
+        }
+        function lanesVendorPick(enc) { setLanesVendor(enc ? decodeURIComponent(enc) : ''); }
         // Gauge + Status always start ON here too.
         let plannerExtras = { gauge: true, status: true };
         function togglePlannerExtra(k) {
@@ -5460,17 +5482,18 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             // Vendor filter (typeable) + by-vendor grouping, just for this tab
             const vkeys = Object.keys(vendCount).sort((a, b) => vendCount[b] - vendCount[a] || a.localeCompare(b));
             lanesVendorKeys = vkeys;
+            lanesVendCount = vendCount;
             sm += '<span style="margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-size:12px;">'
                 + '<strong style="color:#555;">Vendor:</strong>'
-                + '<span style="position:relative;display:inline-block;">'
-                + '<input list="lanesVendorDL" value="' + escAttr(lanesVendor ? vlabel(lanesVendor) : '') + '"'
-                + ' placeholder="All vendors — type to filter" onchange="lanesVendorTyped(this.value)"'
-                + ' style="width:230px;padding:6px 26px 6px 10px;border:1px solid #ccc;border-radius:6px;font-size:12px;">'
+                + '<span class="vendor-search-wrap" style="width:340px;min-width:340px;">'
+                + '<input type="text" value="' + escAttr(lanesVendor ? vlabel(lanesVendor) : '') + '" autocomplete="off"'
+                + ' placeholder="All vendors — type to filter"'
+                + ' onfocus="lanesVendorDD(this.value)" oninput="lanesVendorDD(this.value)" onchange="lanesVendorTyped(this.value)"'
+                + ' onblur="lanesVendorDDClose()"'
+                + ' style="width:100%;padding:6px 26px 6px 10px;border:1px solid #ccc;border-radius:6px;font-size:12px;">'
                 + (lanesVendor ? '<span class="vendor-clear" onclick="setLanesVendor(\'\')">&times;</span>' : '')
-                + '</span>'
-                + '<datalist id="lanesVendorDL"><option value="All vendors"></option>'
-                + vkeys.map(vk => '<option value="' + escAttr(vlabel(vk)) + '" label="' + vendCount[vk] + ' items"></option>').join('')
-                + '</datalist> '
+                + '<div class="vendor-dropdown" id="lanesVendorDD" onmousedown="event.preventDefault()"></div>'
+                + '</span> '
                 + plannerChip(lanesByVendor, 'toggleLanesByVendor()', 'Group by vendor')
                 + ' <button type="button" class="btn btn-outline" style="padding:6px 12px;font-size:12px;" onclick="lanesExportCSV()">Export CSV</button>'
                 + '</span>';
@@ -5487,9 +5510,10 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 ['over', 'OVERSTOCKED', '#6a1b9a', 'above max or ' + fmtMo(cuts.over) + '+ mo'],
             ];
             const card = (e, key, color) => {
-                const badge = key === 'over' ? fmt(e.r.availInv) + ' inv'
+                // Lane quantities always round UP (10.2 → 11)
+                const badge = key === 'over' ? fmtCeil(e.r.availInv) + ' inv'
                     : key === 'healthy' ? (isFinite(e.st.cover) ? (Math.round(e.st.cover * 10) / 10) + 'mo' : '∞')
-                    : fmt(e.r.net) + ' net';
+                    : fmtCeil(e.r.net) + ' net';
                 return '<div onclick="showItemDetail(\'' + escJS(e.r.itemNo) + '\')" style="background:white;border:1px solid #eceef6;border-left:3px solid ' + color + ';border-radius:8px;padding:7px 10px;margin-bottom:6px;cursor:pointer;">'
                     + '<div style="display:flex;justify-content:space-between;gap:8px;"><span style="font-weight:600;color:#1a237e;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(e.r.itemNo) + '</span>'
                     + '<span style="font-size:11px;color:' + color + ';font-weight:700;white-space:nowrap;">' + badge + '</span></div>'
@@ -5515,9 +5539,9 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                         const items = buckets.get(vk);
                         const open = lanesOpenVendors.has(key + '|' + vk);
                         const tot = key === 'over'
-                            ? fmt(items.reduce((a, e) => a + e.r.availInv, 0)) + ' inv'
+                            ? fmtCeil(items.reduce((a, e) => a + e.r.availInv, 0)) + ' inv'
                             : key === 'healthy' ? items.length + ' items'
-                            : fmt(items.reduce((a, e) => a + e.r.net, 0)) + ' net';
+                            : fmtCeil(items.reduce((a, e) => a + e.r.net, 0)) + ' net';
                         const vname = vk === '__none__' ? '' : (vendorNames[vk] || '');
                         h += '<div onclick="toggleLaneVendor(\'' + encodeURIComponent(key + '|' + vk) + '\')"'
                           + ' style="background:white;border:1px solid #dfe3f0;border-left:3px solid ' + color + ';border-radius:8px;padding:8px 10px;margin-bottom:6px;cursor:pointer;">'
@@ -5563,7 +5587,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             for (const e of out) {
                 csv += [e.lane, e.r.itemNo, e.r.description || '', e.r.vendorNo ? vendorDisplayLabel(e.r.vendorNo) : '',
                     isFinite(e.st.cover) ? Math.round(e.st.cover * 10) / 10 : '',
-                    e.r.net, e.r.availInv, e.r.salesQty, e.r.purchQty,
+                    Math.ceil(e.r.net), e.r.availInv, e.r.salesQty, e.r.purchQty,
                     e.r.skuMin != null ? e.r.skuMin : '', e.r.skuMax != null ? e.r.skuMax : ''].map(q).join(',') + '\n';
             }
             plannerDownloadCSV(csv, 'priority-lanes-' + s.months + 'm-' + s.method
