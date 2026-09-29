@@ -3225,9 +3225,22 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             const byLoc = map[itemNo];
             const keys = (!locs || locs.length === 0) ? Object.keys(byLoc) : locs.filter(l => byLoc[l]);
             if (keys.length === 0) return null;
-            let mn = 0, mx = 0;
-            for (const l of keys) { mn += byLoc[l].min || 0; mx += byLoc[l].max || 0; }
-            return { min: mn, max: mx };
+            let mn = 0, mx = 0, mult = 0;
+            for (const l of keys) {
+                mn += byLoc[l].min || 0; mx += byLoc[l].max || 0;
+                mult = Math.max(mult, byLoc[l].mult || 0);   // packaging lot size — not summable
+            }
+            return { min: mn, max: mx, mult: mult };
+        }
+        // "Order to Min" quantity: how many to buy so the stock position reaches the
+        // SKU minimum. Position = inventory − on SO + on PO; rounded UP to the order
+        // multiple when the SKU carries one (e.g. DB only ships in lots of 2,304).
+        function orderToMin(od, mm) {
+            if (!od || !mm || !(mm.min > 0)) return null;
+            const need = Math.max(0, Math.ceil(mm.min - (od.availInv - od.salesQty + od.purchQty)));
+            const mult = mm.mult > 1 ? mm.mult : 0;
+            const buy = (need > 0 && mult) ? Math.ceil(need / mult) * mult : need;
+            return { need, buy, mult };
         }
 
         function getSortValue(item, col) {
@@ -3249,6 +3262,10 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             }
             if (col === 'qty_purch_order') {
                 return getScopedOrderData(item.item_no).purchQty || 0;
+            }
+            if (col === 'net_min') {
+                const o = orderToMin(getScopedOrderData(item.item_no), getSkuMinMax(item.item_no));
+                return o ? o.buy : -1;
             }
             if (col.startsWith('net_')) {
                 const dv = getDisplayValues(item);
@@ -3335,8 +3352,8 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         }
 
         // ---- Table extras: six independent toggles, remembered per device ----
-        let tableExtras = { bars: false, gauge: false, status: false, spark: false, expand: false, excel: false };
-        try { Object.assign(tableExtras, JSON.parse(localStorage.getItem('forecastTableExtras') || '{}')); } catch (e) {}
+        // Gauge + Status always start ON (Faik's rule) — no localStorage read here.
+        let tableExtras = { gauge: true, status: true, minorder: false };
         function toggleTableExtra(k) {
             tableExtras[k] = !tableExtras[k];
             try { localStorage.setItem('forecastTableExtras', JSON.stringify(tableExtras)); } catch (e) {}
@@ -3383,10 +3400,12 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             const hasOrders = Object.keys(orderData).length > 0;
             const hasSku = !!locData.sku;
 
-            // Optional-extras chips (Stock gauge / Status) live up in the header row
+            // Optional-extras chips (Order to Min / Stock gauge / Status) live up in the header row
             const extrasChips = document.getElementById('extrasChips');
             if (extrasChips) {
-                extrasChips.innerHTML = plannerChip(!!tableExtras.gauge, "toggleTableExtra('gauge')", 'Stock gauge') + ' '
+                extrasChips.innerHTML = plannerChip(!!tableExtras.minorder, "toggleTableExtra('minorder')", 'Order to Min')
+                    + '<span style="display:inline-block;width:18px;"></span>'
+                    + plannerChip(!!tableExtras.gauge, "toggleTableExtra('gauge')", 'Stock gauge') + ' '
                     + plannerChip(!!tableExtras.status, "toggleTableExtra('status')", 'Status');
             }
 
@@ -3407,11 +3426,19 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 if (hasSku) stockCols.push({ key: 'sku_min', label: 'Min' }, { key: 'sku_max', label: 'Max' });
                 stockCols.push({ key: 'qty_sales_order', label: 'On SO' }, { key: 'qty_purch_order', label: 'On PO' });
                 groups.push({ id: 'stock', label: 'Stock & Orders' + locLabel, summary: 'avail_inv', cols: stockCols });
-                groups.push({ id: 'net', label: 'Net to Purchase' + locLabel, summary: 'net_6m', cols: [
-                    { key: 'net_3m', label: '3M' },
-                    { key: 'net_6m', label: '6M' },
-                    { key: 'net_12m', label: '12M' },
-                ]});
+                // "Order to Min" swaps the forecast-based 3M/6M/12M netting for a single
+                // column: buy enough to bring the stock position back up to the SKU Min.
+                if (tableExtras.minorder) {
+                    groups.push({ id: 'net', label: 'Net to Purchase (to Min)' + locLabel, summary: 'net_min', cols: [
+                        { key: 'net_min', label: 'Order Qty' },
+                    ]});
+                } else {
+                    groups.push({ id: 'net', label: 'Net to Purchase' + locLabel, summary: 'net_6m', cols: [
+                        { key: 'net_3m', label: '3M' },
+                        { key: 'net_6m', label: '6M' },
+                        { key: 'net_12m', label: '12M' },
+                    ]});
+                }
             }
             function visCols(g) {
                 if (colGroupsOpen[g.id]) return g.cols;
@@ -3479,6 +3506,13 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                             case 'net_3m': return '<td class="forecast-val fc-3m">' + fmt(r.net3) + '</td>';
                             case 'net_6m': return '<td class="forecast-val fc-6m">' + fmt(r.net6) + '</td>';
                             case 'net_12m': return '<td class="forecast-val fc-12m">' + fmt(r.net12) + '</td>';
+                            case 'net_min': {
+                                const o = orderToMin(od, mm);
+                                if (!o) return '<td style="color:#bbb;">-</td>';   // no Min set for this item/location
+                                let inner = '<strong style="color:' + (o.buy > 0 ? '#c62828' : '#2e7d32') + ';">' + fmt(o.buy) + '</strong>';
+                                if (o.mult) inner += '<div style="font-size:10px;color:#888;">lots of ' + fmt(o.mult) + (o.buy !== o.need ? ' · need ' + fmt(o.need) : '') + '</div>';
+                                return '<td>' + inner + '</td>';
+                            }
                             default: return '<td>-</td>';
                         }
                     };
@@ -4923,10 +4957,27 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         // Priority Lanes view options: vendor filter + group-by-vendor display
         let lanesVendor = '';        // '' = all vendors, '__none__' = no vendor assigned
         let lanesByVendor = false;
+        let lanesOpenVendors = new Set();   // 'laneKey|vendorKey' — expanded vendor tiles
         function setLanesVendor(v) { lanesVendor = v; renderPlannerLanesView(); }
-        function toggleLanesByVendor() { lanesByVendor = !lanesByVendor; renderPlannerLanesView(); }
-        let plannerExtras = { gauge: false, status: false };
-        try { Object.assign(plannerExtras, JSON.parse(localStorage.getItem('forecastPlannerExtras') || '{}')); } catch (e) {}
+        function toggleLanesByVendor() { lanesByVendor = !lanesByVendor; lanesOpenVendors.clear(); renderPlannerLanesView(); }
+        function toggleLaneVendor(encKey) {
+            const k = decodeURIComponent(encKey);
+            if (lanesOpenVendors.has(k)) lanesOpenVendors.delete(k); else lanesOpenVendors.add(k);
+            renderPlannerLanesView();
+        }
+        // Typed vendor filter (datalist): match a label, a vendor no, or a prefix.
+        function lanesVendorTyped(v) {
+            const q = String(v || '').trim().toLowerCase();
+            if (!q || q.startsWith('all vendor')) { setLanesVendor(''); return; }
+            const keys = lanesVendorKeys || [];
+            const label = (vk) => (vk === '__none__' ? 'No vendor assigned' : vendorDisplayLabel(vk)).toLowerCase();
+            let hit = keys.find(vk => label(vk) === q) || keys.find(vk => vk.toLowerCase() === q)
+                || keys.find(vk => label(vk).startsWith(q)) || keys.find(vk => label(vk).indexOf(q) !== -1);
+            setLanesVendor(hit || '');
+        }
+        let lanesVendorKeys = [];
+        // Gauge + Status always start ON here too.
+        let plannerExtras = { gauge: true, status: true };
         function togglePlannerExtra(k) {
             plannerExtras[k] = !plannerExtras[k];
             try { localStorage.setItem('forecastPlannerExtras', JSON.stringify(plannerExtras)); } catch (e) {}
@@ -4999,6 +5050,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             plannerTab = 'planner';
             lanesVendor = '';
             lanesByVendor = false;
+            lanesOpenVendors.clear();
         }
         function setPlannerOpt(key, value) {
             plannerState[key] = key === 'months' ? parseFloat(value) : value;
@@ -5209,13 +5261,20 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
 
         // ---- Shared table builders (item view + vendor popup) ----
         // Same grouped, colour-coded two-row header as the main table.
+        // Cover thresholds scale with the selected horizon (the old fixed 1/3/12-month
+        // cutoffs were the 6M values): order < H/6 months, watch < H/2, overstock ≥ 2H.
+        function plannerLaneCuts() {
+            const H = plannerState.months || 6;
+            return { order: H / 6, watch: H / 2, over: 2 * H };
+        }
         function plannerHealthOf(r) {
+            const cuts = plannerLaneCuts();
             const monthly = r.monthlyAvg || 0;
             const cover = monthly > 0 ? (r.availInv + r.purchQty - r.salesQty) / monthly : Infinity;
             const overMax = r.skuMax != null && r.skuMax > 0 && r.availInv > r.skuMax;
-            if (overMax || (monthly > 0 && cover >= 12)) return { key: 'over', label: 'OVER', color: '#6a1b9a', rank: 3, cover };
-            if (r.net > 0 && cover < 1) return { key: 'order', label: 'ORDER NOW', color: '#c62828', rank: 0, cover };
-            if (r.net > 0 && cover < 3) return { key: 'watch', label: 'WATCH', color: '#e65100', rank: 1, cover };
+            if (overMax || (monthly > 0 && cover >= cuts.over)) return { key: 'over', label: 'OVER', color: '#6a1b9a', rank: 3, cover };
+            if (r.net > 0 && cover < cuts.order) return { key: 'order', label: 'ORDER NOW', color: '#c62828', rank: 0, cover };
+            if (r.net > 0 && cover < cuts.watch) return { key: 'watch', label: 'WATCH', color: '#e65100', rank: 1, cover };
             return { key: 'ok', label: 'OK', color: '#2e7d32', rank: 2, cover };
         }
         function plannerColDefs(withVendor) {
@@ -5389,24 +5448,30 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             sm += smTile(lanes.watch.length, 'Watch', '#e65100', '#fff3e0');
             sm += smTile(lanes.healthy.length, 'Healthy', '#2e7d32', '#e8f5e9');
             sm += smTile(lanes.over.length, 'Overstocked', '#6a1b9a', '#f3e5f5');
-            // Vendor filter + by-vendor grouping, just for this tab
+            // Vendor filter (typeable) + by-vendor grouping, just for this tab
             const vkeys = Object.keys(vendCount).sort((a, b) => vendCount[b] - vendCount[a] || a.localeCompare(b));
+            lanesVendorKeys = vkeys;
             sm += '<span style="margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-size:12px;">'
                 + '<strong style="color:#555;">Vendor:</strong>'
-                + '<select onchange="setLanesVendor(this.value)" style="max-width:260px;padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:12px;">'
-                + '<option value="">All vendors (' + alive.length.toLocaleString() + ' items)</option>'
-                + vkeys.map(vk => '<option value="' + escAttr(vk) + '"' + (lanesVendor === vk ? ' selected' : '') + '>' + esc(vlabel(vk)) + ' (' + vendCount[vk] + ')</option>').join('')
-                + '</select> '
+                + '<input list="lanesVendorDL" value="' + escAttr(lanesVendor ? vlabel(lanesVendor) : '') + '"'
+                + ' placeholder="All vendors — type to filter" onchange="lanesVendorTyped(this.value)"'
+                + ' style="width:230px;padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:12px;">'
+                + '<datalist id="lanesVendorDL"><option value="All vendors"></option>'
+                + vkeys.map(vk => '<option value="' + escAttr(vlabel(vk)) + '" label="' + vendCount[vk] + ' items"></option>').join('')
+                + '</datalist> '
                 + plannerChip(lanesByVendor, 'toggleLanesByVendor()', 'Group by vendor')
                 + '</span>';
             sm += '</div>';
             document.getElementById('plannerSummary').innerHTML = sm;
 
+            // Lane cut-offs follow the horizon (fmtMo trims trailing zeros: 0.5, 1, 6...)
+            const cuts = plannerLaneCuts();
+            const fmtMo = (n) => (Math.round(n * 10) / 10).toLocaleString();
             const defs = [
-                ['order', 'ORDER NOW', '#c62828', 'under 1 month of cover'],
-                ['watch', 'WATCH', '#e65100', '1–3 months of cover'],
+                ['order', 'ORDER NOW', '#c62828', 'under ' + fmtMo(cuts.order) + ' mo of cover'],
+                ['watch', 'WATCH', '#e65100', fmtMo(cuts.order) + '–' + fmtMo(cuts.watch) + ' mo of cover'],
                 ['healthy', 'HEALTHY', '#2e7d32', 'comfortable cover'],
-                ['over', 'OVERSTOCKED', '#6a1b9a', 'above max or 12+ months'],
+                ['over', 'OVERSTOCKED', '#6a1b9a', 'above max or ' + fmtMo(cuts.over) + '+ mo'],
             ];
             const card = (e, key, color) => {
                 const badge = key === 'over' ? fmt(e.r.availInv) + ' inv'
@@ -5424,8 +5489,8 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                   + '<div style="padding:9px 12px;border-bottom:2px solid ' + color + ';flex-shrink:0;"><span style="font-weight:700;color:' + color + ';font-size:12px;letter-spacing:1px;">' + label + '</span> <span style="font-size:11px;color:#999;">' + arr.length + ' · ' + hint + '</span></div>'
                   + '<div style="padding:8px;">';
                 if (lanesByVendor) {
-                    // Bucket this lane's items under vendor headers, biggest vendors first,
-                    // keeping the lane's own urgency order inside each bucket.
+                    // Vendor TILES (like the planner's), biggest vendors first; click a
+                    // tile to expand that vendor's items inside this lane.
                     const buckets = new Map();
                     for (const e of arr) {
                         const vk = vkey(e.r);
@@ -5435,9 +5500,25 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                     const bkeys = Array.from(buckets.keys()).sort((a, b) => buckets.get(b).length - buckets.get(a).length || a.localeCompare(b));
                     for (const vk of bkeys) {
                         const items = buckets.get(vk);
-                        h += '<div style="margin:10px 0 6px;padding:5px 9px;background:#eef0f7;border-radius:6px;font-size:11px;font-weight:700;color:#333;display:flex;justify-content:space-between;gap:8px;">'
-                          + '<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(vlabel(vk)) + '</span><span style="color:#888;flex-shrink:0;">' + items.length + '</span></div>';
-                        for (const e of items) h += card(e, key, color);
+                        const open = lanesOpenVendors.has(key + '|' + vk);
+                        const tot = key === 'over'
+                            ? fmt(items.reduce((a, e) => a + e.r.availInv, 0)) + ' inv'
+                            : key === 'healthy' ? items.length + ' items'
+                            : fmt(items.reduce((a, e) => a + e.r.net, 0)) + ' net';
+                        const vname = vk === '__none__' ? '' : (vendorNames[vk] || '');
+                        h += '<div onclick="toggleLaneVendor(\'' + encodeURIComponent(key + '|' + vk) + '\')"'
+                          + ' style="background:white;border:1px solid #dfe3f0;border-left:3px solid ' + color + ';border-radius:8px;padding:8px 10px;margin-bottom:6px;cursor:pointer;">'
+                          + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">'
+                          + '<span style="font-weight:700;color:#1a237e;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (open ? '&#x25BE; ' : '&#x25B8; ') + esc(vk === '__none__' ? 'No vendor assigned' : vk) + '</span>'
+                          + '<span style="font-size:11px;color:' + color + ';font-weight:700;white-space:nowrap;">' + tot + '</span></div>'
+                          + '<div style="display:flex;justify-content:space-between;gap:8px;font-size:10px;color:#999;">'
+                          + '<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(vname) + '</span><span style="flex-shrink:0;">' + items.length + ' items</span></div>'
+                          + '</div>';
+                        if (open) {
+                            h += '<div style="margin:0 0 6px 10px;">';
+                            for (const e of items) h += card(e, key, color);
+                            h += '</div>';
+                        }
                     }
                 } else {
                     for (const e of arr) h += card(e, key, color);

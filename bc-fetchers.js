@@ -491,6 +491,7 @@ async function bcFetchLocationData() {
         const fMinOrd = bcPickField(fields, ["Minimum_Order_Quantity", "minimumOrderQuantity"]);
         const fMaxOrd = bcPickField(fields, ["Maximum_Order_Quantity", "maximumOrderQuantity"]);
         const fReord = bcPickField(fields, ["Reorder_Point", "reorderPoint"]);
+        const fMult = bcPickField(fields, ["Order_Multiple", "orderMultiple"]);
         const fMaxInv = bcPickField(fields, ["Maximum_Inventory", "maximumInventory"]);
         console.log("SKU entity:", entity, "| item:", fItem, "loc:", fLoc,
             "minOrd:", fMinOrd, "maxOrd:", fMaxOrd, "reorderPt:", fReord, "maxInv:", fMaxInv);
