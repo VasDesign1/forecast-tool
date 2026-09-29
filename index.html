@@ -105,9 +105,11 @@
 
         .table-scroll { overflow-x: auto; max-height: 70vh; overflow-y: auto; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        thead { z-index: 10; }
+        /* z-index must sit on the sticky th cells themselves (thead is unpositioned, so
+           z-index there is inert) — above the frozen body cells (3) and the gauges'
+           absolutely-positioned markers, below the frozen header corner cells (12). */
         th {
-            position: sticky; top: 0;
+            position: sticky; top: 0; z-index: 5;
             background: #e8eaf6; color: #1a237e; padding: 12px 15px;
             text-align: left; font-weight: 600; font-size: 12px;
             text-transform: uppercase; letter-spacing: 0.3px;
@@ -5240,9 +5242,9 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             const { idCols, grps } = plannerColDefs(withVendor);
             const grpBg = { forecast: '#1565c0', stock: '#6a1b9a', net: '#e65100' };
             const subBg = { forecast: 'background:#e3f2fd;color:#1565c0;', stock: 'background:#f3e5f5;color:#6a1b9a;', net: 'background:#fff3e0;color:#e65100;' };
-            const thId = 'background:#e8eaf6;padding:6px 10px;color:#1a237e;font-weight:600;font-size:11px;text-align:left;position:sticky;top:0;vertical-align:middle;';
-            const thGrp = 'padding:5px 10px;color:white;font-weight:700;font-size:10px;letter-spacing:0.8px;text-align:center;position:sticky;top:0;';
-            const thSub = 'padding:6px 10px;font-weight:600;font-size:11px;text-align:right;position:sticky;top:27px;';
+            const thId = 'background:#e8eaf6;padding:6px 10px;color:#1a237e;font-weight:600;font-size:11px;text-align:left;position:sticky;top:0;z-index:5;vertical-align:middle;';
+            const thGrp = 'padding:5px 10px;color:white;font-weight:700;font-size:10px;letter-spacing:0.8px;text-align:center;position:sticky;top:0;z-index:5;';
+            const thSub = 'padding:6px 10px;font-weight:600;font-size:11px;text-align:right;position:sticky;top:27px;z-index:5;';
             const sc = (key) => {
                 let cls = 'sortable';
                 if (plannerSort.key === key) cls += plannerSort.dir === 'asc' ? ' sorted-asc' : ' sorted-desc';
