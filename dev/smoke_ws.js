@@ -20,7 +20,7 @@ checks.push(["method chips render in filters", __test.el("wsMethodChips").indexO
 checks.push(["horizon chips render in filters", __test.el("wsHorizonChips").indexOf("wsSetPlannerOpt") !== -1]);
 checks.push(["horizon active on every tab", __test.el("wsHorizonChips").indexOf("pointer-events:none") === -1]);
 checks.push(["increase % chips in horizon cell", __test.el("wsHorizonChips").indexOf("wsSetPct") !== -1]);
-checks.push(["extras bar shows table chips on results tab", __test.el("wsExtrasBar").indexOf("Reorder policy") !== -1 && __test.el("wsExtrasBar").indexOf("Round up") !== -1]);
+checks.push(["extras bar shows table chips on results tab", __test.el("wsExtrasChips").indexOf("Reorder policy") !== -1 && __test.el("wsExtrasChips").indexOf("Round up") !== -1]);
 checks.push(["period/group dimmed on results tab", __test.el("wsPeriodChips").indexOf("pointer-events:none") !== -1]);
 
 // Planner tab inline
@@ -40,7 +40,7 @@ __test.setMethod("standard");
 // Lanes tab: local vendor search hidden, group chip stays
 checks.push(["lanes tab selects", __test.wsSel("lanes") === "lanes"]);
 checks.push(["lanes summary hides local vendor search", __test.el("plannerSummary").indexOf("lanesVendorTyped") === -1]);
-checks.push(["group-by-vendor chip moved to extras bar", __test.el("wsExtrasBar").indexOf("toggleLanesByVendor") !== -1 && __test.el("plannerSummary").indexOf("toggleLanesByVendor") === -1]);
+checks.push(["group-by-vendor chip in extras area, not lanes summary", __test.el("wsExtrasChips").indexOf("lanesvendor") !== -1 && __test.el("plannerSummary").indexOf("toggleLanesByVendor") === -1]);
 checks.push(["lanes hides local export (strip covers it)", __test.el("plannerSummary").indexOf("lanesExportCSV") === -1]);
 
 // Inline vendor drill-down (no popup in tab view)

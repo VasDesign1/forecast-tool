@@ -21,8 +21,8 @@
             color: white; padding: 20px 30px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.2);
         }
-        .header h1 { font-size: 24px; font-weight: 600; }
-        .header .subtitle { font-size: 13px; opacity: 0.8; margin-top: 4px; }
+        .header h1 { font-size: 24px; font-weight: 600; margin-left: 104px; }
+        .header .subtitle { font-size: 13px; opacity: 0.8; margin-top: 4px; margin-left: 104px; }
 
         .container { max-width: 1600px; margin: 0 auto; padding: 20px; }
 
@@ -429,9 +429,32 @@
         /* Connection panel + stats collapse behind the chevron — in BOTH layouts */
         #topPanel { display: none; }
         body.top-open #topPanel { display: block; }
-        /* Tab view: give the Location cluster room, slim the loc buttons */
-        body.ws-mode .cgrid { grid-template-columns: minmax(280px, 0.95fr) minmax(400px, 1.35fr) minmax(230px, 0.9fr); }
+        /* Tab view filter layout - 12-col grid:
+           row 1: dates+apply/reset | location
+           row 2: method | forecast period (+increase %) | period+group | show+chips
+           row 3: search | vendor  */
+        body.ws-mode .cgrid { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+        body.ws-mode #fgDates { grid-column: span 5; order: 1; }
+        body.ws-mode #fgLoc { grid-column: span 7; order: 2; }
+        body.ws-mode #fgMethod { grid-column: span 3; order: 3; }
+        body.ws-mode #fgHorizon { grid-column: span 4; order: 4; }
+        body.ws-mode #fgPG { grid-column: span 3; order: 5; }
+        body.ws-mode #fgShow { grid-column: span 2; order: 6; }
+        body.ws-mode #fgSearch { grid-column: span 6; order: 7; }
+        body.ws-mode #fgVendor { grid-column: span 6; order: 8; }
         body.ws-mode .loc-btn { padding: 6px 10px; }
+        body.ws-mode #containerSettingsPane { display: none !important; }
+        /* Compact filters in tab view */
+        body.ws-mode #controlsBar { padding: 10px 14px; margin-bottom: 12px; }
+        body.ws-mode .cgrid { gap: 6px 8px; }
+        body.ws-mode .fgroup { padding: 5px 10px; gap: 6px; }
+        body.ws-mode .controls label { font-size: 12px; }
+        body.ws-mode .controls select, body.ws-mode .controls input[type="text"] { padding: 5px 8px; font-size: 12px; min-width: 110px; }
+        body.ws-mode .controls input[type="date"] { padding: 5px 6px !important; font-size: 12px !important; }
+        body.ws-mode #fgDates .btn { padding: 5px 12px !important; }
+        /* Chevron: no gap to the header, small strip with a big arrow */
+        #topChevron { text-align: center; margin: -20px 0 12px; }
+        #topChevronBtn { padding: 0 24px !important; font-size: 17px !important; line-height: 1.25 !important; border-top: none !important; border-radius: 0 0 9px 9px !important; }
         /* Container tab: method + predicted/export buttons give way to the global filters and tab-strip exports */
         body.ws-mode #containerMethodBtns, body.ws-mode #predictForecastBtn,
         body.ws-mode #cExcelBtn, body.ws-mode #cPoBtn { display: none !important; }
@@ -1165,10 +1188,12 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             <div class="subtitle">Upload item ledger entries to generate demand forecasts (v2.1 — Assembly Support — Wiise Connected)</div>
         </div>
         <!-- Centered so the import badges (top-right) can never cover it -->
-        <button id="themeBtn" onclick="openThemePicker()" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.45);color:inherit;padding:7px 18px;border-radius:8px;cursor:pointer;font-size:13px;">Theme</button>
-        <span id="wsToggleWrap" onclick="toggleWorkspace()" title="Tab view: filters on top, everything else as tabs (Forecast, Container, Predicted, Planner, Lanes)"
-              style="position:absolute;left:calc(50% + 52px);top:50%;transform:translateY(-50%);display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;font-weight:600;letter-spacing:0.4px;user-select:none;">
-            <span class="ws-switch" id="wsSwitch"><span class="ws-knob"></span></span> TAB VIEW</span>
+        <span id="hdrCtrls" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:7px;align-items:flex-start;">
+            <button id="themeBtn" onclick="openThemePicker()" style="background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.45);color:inherit;padding:5px 16px;border-radius:8px;cursor:pointer;font-size:12px;">Theme</button>
+            <span id="wsToggleWrap" onclick="toggleWorkspace()" title="Tab view: filters on top, everything else as tabs (Forecast, Container, Predicted, Planner, Lanes)"
+                  style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-size:11px;font-weight:600;letter-spacing:0.4px;user-select:none;">
+                <span class="ws-switch" id="wsSwitch"><span class="ws-knob"></span></span> TAB VIEW</span>
+        </span>
     </div>
 
     <!-- Theme picker overlay -->
@@ -1186,7 +1211,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
 
     <div class="container">
         <!-- Tab view: the connection panel + stats collapse behind this chevron -->
-        <div id="topChevron" style="text-align:center;margin:-8px 0 12px;">
+        <div id="topChevron">
             <button onclick="wsToggleTop()" id="topChevronBtn" title="Show / hide the connection panel and data stats" style="background:white;border:1px solid #d6d8eb;border-radius:0 0 10px 10px;padding:3px 26px;cursor:pointer;font-size:13px;color:#555;box-shadow:0 2px 6px rgba(0,0,0,0.08);">&#x25BE;</button>
         </div>
         <div id="topPanel">
@@ -1266,7 +1291,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         <div class="controls" id="controlsBar" style="display:none;">
             <!-- Both rows share one grid so cluster edges align exactly -->
             <div class="cgrid">
-                <div class="fgroup">
+                <div class="fgroup" id="fgDates">
                     <label>Date From:</label>
                     <input type="date" id="dateFrom" style="padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
                     <label>Date To:</label>
@@ -1274,13 +1299,13 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                     <button class="btn btn-primary" onclick="applyDateRange()" style="padding:7px 14px;">Apply</button>
                     <button class="btn btn-outline" onclick="resetDateRange()" style="padding:7px 14px;">Reset</button>
                 </div>
-                <div class="fgroup">
+                <div class="fgroup" id="fgLoc">
                     <label>Location:</label>
                     <div class="loc-toggles" id="locationToggles">
                         <button class="loc-btn all-btn active" data-loc="all" onclick="toggleLocation(this)">All</button>
                     </div>
                 </div>
-                <div class="fgroup">
+                <div class="fgroup" id="fgShow">
                     <label>Show:</label>
                     <select id="pageSize">
                         <option value="25">25 rows</option>
@@ -1289,12 +1314,13 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                         <option value="250">250 rows</option>
                         <option value="500">500 rows</option>
                     </select>
+                    <span id="wsExtrasChips" class="ws-only" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;"></span>
                 </div>
-                <div class="fgroup">
+                <div class="fgroup" id="fgSearch">
                     <label>Search:</label>
                     <input type="text" id="searchInput" placeholder="Search by Item No. or Description..." style="flex:1;min-width:180px;">
                 </div>
-                <div class="fgroup">
+                <div class="fgroup" id="fgVendor">
                     <label>Vendor:</label>
                     <div class="vendor-search-wrap" style="flex:1;">
                         <input type="text" id="vendorSearchInput" placeholder="Search by vendor no. or name..." autocomplete="off"
@@ -1308,14 +1334,12 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                     <button class="btn btn-primary" onclick="openOrderPlanner()" style="padding:8px 14px;">Order Planner</button>
                 </div>
                 <!-- Tab view only: tool-wide Method / Horizon / Period+Group filters -->
-                <div class="fgroup ws-only"><label>Method:</label><span id="wsMethodChips" style="display:flex;gap:5px;flex-wrap:wrap;"></span></div>
-                <div class="fgroup ws-only"><label>Horizon:</label><span id="wsHorizonChips" style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;"></span></div>
-                <div class="fgroup ws-only" id="wsPeriodGroupCell"><label>Period:</label><span id="wsPeriodChips" style="display:flex;gap:5px;"></span><label style="margin-left:10px;">Group by:</label><span id="wsGroupChips" style="display:flex;gap:5px;"></span></div>
+                <div class="fgroup ws-only" id="fgMethod"><label>Method:</label><span id="wsMethodChips" style="display:flex;gap:5px;flex-wrap:wrap;"></span></div>
+                <div class="fgroup ws-only" id="fgHorizon" style="align-items:flex-start;"><label style="margin-top:6px;">Forecast Period:</label><span id="wsHorizonChips" style="display:flex;flex-direction:column;gap:6px;"></span></div>
+                <div class="fgroup ws-only" id="fgPG"><label>Period:</label><span id="wsPeriodChips" style="display:flex;gap:5px;"></span><label style="margin-left:10px;">Group by:</label><span id="wsGroupChips" style="display:flex;gap:5px;"></span></div>
             </div>
         </div>
 
-        <!-- Tab view: display-option chips for the active tab, right under the filters -->
-        <div id="wsExtrasBar" class="controls" style="display:none;padding:9px 16px;margin:-8px 0 14px;flex-direction:row;gap:8px;align-items:center;flex-wrap:wrap;"></div>
         <!-- Tab view: tab strip between filters and content -->
         <div id="wsTabs" style="display:none;margin-bottom:14px;align-items:center;gap:8px;flex-wrap:wrap;">
             <span id="wsTabBtns" style="display:flex;gap:8px;flex-wrap:wrap;"></span>
@@ -1415,7 +1439,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 </div>
             </div>
             <!-- Custom Forecast Pane for Container Planning -->
-            <div style="background:#e0f2f1;padding:15px 20px;border-bottom:1px solid #b2dfdb;">
+            <div id="containerSettingsPane" style="background:#e0f2f1;padding:15px 20px;border-bottom:1px solid #b2dfdb;">
                 <h3 style="font-size:14px;color:#00695c;margin-bottom:10px;">Container Forecast Settings</h3>
                 <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;">
                     <div>
@@ -3785,12 +3809,16 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         function buildContainerPlan() {
             containerFillCount = 0;
             containerOptimized = false;
-            const periodVal = document.getElementById('containerPeriod').value;
             let months;
-            if (periodVal === 'custom') {
-                months = Math.max(0.5, parseFloat(document.getElementById('containerCustomMonths').value) || 3);
+            if (wsMode) {
+                months = plannerState.months || 6;   // tab view: the global Forecast Period filter
             } else {
-                months = parseFloat(periodVal) || 3;
+                const periodVal = document.getElementById('containerPeriod').value;
+                if (periodVal === 'custom') {
+                    months = Math.max(0.5, parseFloat(document.getElementById('containerCustomMonths').value) || 3);
+                } else {
+                    months = parseFloat(periodVal) || 3;
+                }
             }
 
             const pct = parseFloat(document.getElementById('containerPctInput').value) || 0;
@@ -6435,6 +6463,12 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 po.disabled = !on;
                 po.style.opacity = on ? '' : '0.45';
             }
+            const cb = document.getElementById('wsExportCsvBtn');
+            if (cb) {
+                const cur = WS_TABS.find(x => x.key === wsTab);
+                cb.textContent = (wsTab === 'container' || wsTab === 'predicted') ? 'Export to Excel' : 'Export CSV';
+                cb.title = 'Exports the ' + (cur ? cur.label : '') + ' tab';
+            }
         }
         function wsApplyTabView() {
             const tc = document.getElementById('tableContainer');
@@ -6472,6 +6506,11 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         }
         function wsSetPlannerOpt(key, value) {
             setPlannerOpt(key, value);
+            // The container plan follows the global Forecast Period in tab view
+            if (key === 'months' && wsMode && wsContainerReady()) {
+                buildContainerPlan();
+                if (wsTab === 'predicted') wsSelectTab('container');   // needs re-optimizing
+            }
             wsRenderFilterChips();
         }
         function wsSetCustomMonths(v) {
@@ -6479,7 +6518,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             wsRenderFilterChips();
         }
         function wsSetPct(v) {
-            setContainerPct(v);
+            setContainerPct(parseFloat(v) || 0);
             wsRenderFilterChips();
         }
         function wsRenderFilterChips() {
@@ -6497,8 +6536,12 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 + plannerChip(months === 12, "wsSetPlannerOpt('months','12')", '12M') + ' '
                 + '<input type="number" min="0.5" max="60" step="0.1" value="' + (isPreset ? '' : months) + '" placeholder="e.g. 7.6"'
                 + ' onchange="wsSetCustomMonths(this.value)"'
-                + ' style="width:74px;padding:6px 8px;border-radius:6px;font-size:12px;border:1px solid ' + (isPreset ? '#ccc' : '#1a237e') + ';">'
-                + '<span style="font-size:11px;color:#888;margin-left:8px;">Increase %:</span> '
+                + ' style="width:70px;padding:5px 7px;border-radius:6px;font-size:12px;border:1px solid ' + (isPreset ? '#ccc' : '#1a237e') + ';"></span>'
+                + '<span style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">'
+                + '<span style="font-size:11px;color:#888;">Increase %:</span>'
+                + '<input type="number" min="0" step="1" value="' + escAttr(pctEl ? pctEl.value : '') + '" placeholder="e.g. 10"'
+                + ' onchange="wsSetPct(this.value)"'
+                + ' style="width:60px;padding:5px 7px;border-radius:6px;font-size:12px;border:1px solid #ccc;"> '
                 + [0, 10, 20, 30, 50].map(x => plannerChip(pct === x && !!(pctEl && pctEl.value !== ''), "wsSetPct(" + x + ")", x === 0 ? '0%' : '+' + x + '%')).join(' ')
                 + '</span>';
             const en = (wsTab === 'planner' || wsTab === 'lanes');
@@ -6512,30 +6555,38 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 + plannerChip(plannerState.group === 'vendor', "wsSetPlannerOpt('group','vendor')", 'Vendor') + ' '
                 + plannerChip(plannerState.group === 'item', "wsSetPlannerOpt('group','item')", 'Item') + '</span>';
         }
-        // Display-option chips for the ACTIVE tab, in one bar under the filters
-        function wsRenderExtras() {
-            const bar = document.getElementById('wsExtrasBar');
-            if (!bar) return;
-            if (!wsMode) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
-            let h = '';
-            if (wsTab === 'results') {
-                h = plannerChip(!!tableExtras.minorder, "toggleTableExtra('minorder')", 'Order to Min')
-                    + '<span style="display:inline-block;width:14px;"></span>'
-                    + plannerChip(!!tableExtras.roundup, "toggleTableExtra('roundup')", 'Round up') + ' '
-                    + '<span title="Reordering Policy = Order items hide unless they have open sales-order quantity.">'
-                    + plannerChip(hideReorderPolicyItems, 'toggleReorderPolicy()', 'Reorder policy') + '</span> '
-                    + plannerChip(!!tableExtras.gauge, "toggleTableExtra('gauge')", 'Stock gauge') + ' '
-                    + plannerChip(!!tableExtras.status, "toggleTableExtra('status')", 'Status');
-            } else if (wsTab === 'planner' && (plannerState.group === 'item' || wsPlannerVendor)) {
-                h = plannerChip(!!plannerExtras.minorder, "togglePlannerExtra('minorder')", 'Order to Min')
-                    + '<span style="display:inline-block;width:14px;"></span>'
-                    + plannerChip(!!plannerExtras.gauge, "togglePlannerExtra('gauge')", 'Stock gauge') + ' '
-                    + plannerChip(!!plannerExtras.status, "togglePlannerExtra('status')", 'Status');
-            } else if (wsTab === 'lanes') {
-                h = plannerChip(lanesByVendor, 'toggleLanesByVendor()', 'Group by vendor');
+        // Display-option chips: one set in the Show cell, always visible once data
+        // is in; each chip acts on the ACTIVE tab and dims when not relevant there.
+        function wsChipToggle(kind) {
+            const onPlanner = wsTab === 'planner';
+            if (kind === 'minorder' || kind === 'gauge' || kind === 'status') {
+                if (onPlanner) togglePlannerExtra(kind); else toggleTableExtra(kind);
+            } else if (kind === 'roundup') {
+                toggleTableExtra('roundup');
+            } else if (kind === 'reorderpol') {
+                toggleReorderPolicy();
+            } else if (kind === 'lanesvendor') {
+                toggleLanesByVendor();
             }
-            bar.innerHTML = h;
-            bar.style.display = h ? 'flex' : 'none';
+            wsRenderExtras();
+        }
+        function wsRenderExtras() {
+            const bar = document.getElementById('wsExtrasChips');
+            if (!bar) return;
+            if (!wsMode || allData.length === 0) { bar.innerHTML = ''; return; }
+            const onResults = wsTab === 'results';
+            const onPlanner = wsTab === 'planner';
+            const plannerTableShown = onPlanner && (plannerState.group === 'item' || wsPlannerVendor);
+            const wrap = (on, inner) => '<span style="' + (on ? '' : 'opacity:0.45;pointer-events:none;') + '">' + inner + '</span>';
+            const minOn = onPlanner ? !!plannerExtras.minorder : !!tableExtras.minorder;
+            const gaugeOn = onPlanner ? !!plannerExtras.gauge : !!tableExtras.gauge;
+            const statusOn = onPlanner ? !!plannerExtras.status : !!tableExtras.status;
+            bar.innerHTML = wrap(onResults || plannerTableShown, plannerChip(minOn, "wsChipToggle('minorder')", 'Order to Min'))
+                + wrap(onResults, plannerChip(!!tableExtras.roundup, "wsChipToggle('roundup')", 'Round up'))
+                + wrap(onResults || onPlanner || wsTab === 'lanes', plannerChip(hideReorderPolicyItems, "wsChipToggle('reorderpol')", 'Reorder policy'))
+                + wrap(onResults || plannerTableShown, plannerChip(gaugeOn, "wsChipToggle('gauge')", 'Stock gauge'))
+                + wrap(onResults || plannerTableShown, plannerChip(statusOn, "wsChipToggle('status')", 'Status'))
+                + wrap(wsTab === 'lanes', plannerChip(lanesByVendor, "wsChipToggle('lanesvendor')", 'Group by vendor'));
         }
         function wsExportCSV() {
             if (wsTab === 'planner') return plannerExportCSV();
