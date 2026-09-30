@@ -5198,8 +5198,13 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         let lanesVendor = '';        // '' = all vendors, '__none__' = no vendor assigned
         let lanesByVendor = false;
         let lanesOpenVendors = new Set();   // 'laneKey|vendorKey' — expanded vendor tiles
-        function setLanesVendor(v) { lanesVendor = v; renderPlannerLanesView(); }
-        function toggleLanesByVendor() { lanesByVendor = !lanesByVendor; lanesOpenVendors.clear(); renderPlannerLanesView(); wsRenderExtras(); }
+        let lanesShown = {};                // laneKey -> how many "Show rows" pages are visible
+        function lanesLoadMore(k) {
+            lanesShown[k] = (lanesShown[k] || 1) + 1;
+            renderPlannerLanesView();
+        }
+        function setLanesVendor(v) { lanesVendor = v; lanesShown = {}; renderPlannerLanesView(); }
+        function toggleLanesByVendor() { lanesByVendor = !lanesByVendor; lanesOpenVendors.clear(); lanesShown = {}; renderPlannerLanesView(); wsRenderExtras(); }
         function toggleLaneVendor(encKey) {
             const k = decodeURIComponent(encKey);
             if (lanesOpenVendors.has(k)) lanesOpenVendors.delete(k); else lanesOpenVendors.add(k);
@@ -5314,6 +5319,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             lanesVendor = '';
             lanesByVendor = false;
             lanesOpenVendors.clear();
+            lanesShown = {};
         }
         function setPlannerOpt(key, value) {
             plannerState[key] = key === 'months' ? parseFloat(value) : value;
@@ -5851,7 +5857,8 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 h += '<div style="flex:1;min-width:0;background:#fafbfe;border:1px solid #e8eaf2;border-radius:10px;display:flex;flex-direction:column;">'
                   + '<div style="padding:9px 12px;border-bottom:2px solid ' + color + ';flex-shrink:0;"><span style="font-weight:700;color:' + color + ';font-size:12px;letter-spacing:1px;">' + label + '</span> <span style="font-size:11px;color:#999;">' + arr.length + ' · ' + hint + '</span></div>'
                   + '<div style="padding:8px;">';
-                const laneCap = parseInt(document.getElementById('pageSize') && document.getElementById('pageSize').value) || 50;
+                const laneBase = parseInt(document.getElementById('pageSize') && document.getElementById('pageSize').value) || 50;
+                const laneCap = laneBase * (lanesShown[key] || 1);
                 if (lanesByVendor) {
                     // Vendor TILES (like the planner's), biggest vendors first; click a
                     // tile to expand that vendor's items inside this lane.
@@ -5881,13 +5888,13 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                         if (open) {
                             h += '<div style="margin:0 0 6px 10px;">';
                             for (const e of items.slice(0, laneCap)) h += card(e, key, color);
-                            if (items.length > laneCap) h += '<div style="text-align:center;font-size:11px;color:#999;padding:4px;">+' + (items.length - laneCap) + ' more — raise "Show" rows</div>';
+                            if (items.length > laneCap) h += '<div onclick="lanesLoadMore(' + "'" + key + "'" + ')" style="text-align:center;font-size:11px;color:#3f51b5;padding:6px;cursor:pointer;font-weight:600;">+' + (items.length - laneCap) + ' more — click to show ' + Math.min(laneBase, items.length - laneCap) + ' more</div>';
                             h += '</div>';
                         }
                     }
                 } else {
                     for (const e of arr.slice(0, laneCap)) h += card(e, key, color);
-                    if (arr.length > laneCap) h += '<div style="text-align:center;font-size:11px;color:#999;padding:4px;">+' + (arr.length - laneCap) + ' more — raise "Show" rows</div>';
+                    if (arr.length > laneCap) h += '<div onclick="lanesLoadMore(' + "'" + key + "'" + ')" style="text-align:center;font-size:11px;color:#3f51b5;padding:6px;cursor:pointer;font-weight:600;">+' + (arr.length - laneCap) + ' more — click to show ' + Math.min(laneBase, arr.length - laneCap) + ' more</div>';
                 }
                 if (arr.length === 0) h += '<div style="text-align:center;font-size:11px;color:#bbb;padding:10px;">None</div>';
                 h += '</div></div>';
