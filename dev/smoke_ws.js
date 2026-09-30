@@ -18,10 +18,17 @@ checks.push(["five tabs render", (th.match(/ws-tab/g) || []).length >= 5 && th.i
 checks.push(["predicted disabled without vendor", /Predicted Forecast<\/button>/.test(th) && th.indexOf("disabled") !== -1]);
 checks.push(["method chips render in filters", __test.el("wsMethodChips").indexOf("wsSetMethod") !== -1]);
 checks.push(["horizon chips render in filters", __test.el("wsHorizonChips").indexOf("wsSetPlannerOpt") !== -1]);
-checks.push(["horizon active on every tab", __test.el("wsHorizonChips").indexOf("pointer-events:none") === -1]);
 checks.push(["increase % chips in horizon cell", __test.el("wsHorizonChips").indexOf("wsSetPct") !== -1]);
 checks.push(["extras bar shows table chips on results tab", __test.el("wsExtrasChips").indexOf("Reorder policy") !== -1 && __test.el("wsExtrasChips").indexOf("Round up") !== -1]);
 checks.push(["period/group dimmed on results tab", __test.el("wsPeriodChips").indexOf("pointer-events:none") !== -1]);
+
+// Custom Forecast Period swaps the results table's FORECAST columns
+checks.push(["preset horizon chips dimmed on results", __test.el("wsHorizonChips").indexOf("pointer-events:none") !== -1]);
+__test.wsOpt("months", "7.5");
+checks.push(["custom month becomes the forecast column", __test.el("tableHead").indexOf("7.5M") !== -1 && __test.el("tableHead").indexOf("forecast_12m") === -1]);
+checks.push(["preset chips reactivate with custom month", __test.el("wsHorizonChips").indexOf("pointer-events:none") === -1]);
+__test.wsOpt("months", "6");
+checks.push(["preset restores standard columns", __test.el("tableHead").indexOf("forecast_12m") !== -1]);
 
 // Planner tab inline
 checks.push(["planner tab selects", __test.wsSel("planner") === "planner"]);

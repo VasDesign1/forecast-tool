@@ -3493,6 +3493,9 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 const mm = getSkuMinMax(item.item_no);
                 return mm && mm.mult > 1 ? mm.mult : -1;
             }
+            if (col === 'forecast_custom') {
+                return (getDisplayValues(item).monthly_avg || 0) * (plannerState.months || 6);
+            }
             if (col.startsWith('net_')) {
                 const dv = getDisplayValues(item);
                 const od = getScopedOrderData(item.item_no);
@@ -3625,6 +3628,8 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             const locLabel = showLoc ? ' (Loc ' + locs.map(l => esc(l)).join('+') + ')' : '';
             const hasOrders = Object.keys(orderData).length > 0;
             const hasSku = !!locData.sku;
+            // Tab view: a CUSTOM Forecast Period (e.g. 7.6M) replaces the 3M/6M/12M columns
+            const wsCustomM = (wsMode && plannerState.months && [3, 6, 12].indexOf(plannerState.months) === -1) ? plannerState.months : null;
 
             // Optional-extras chips: header row in classic, the bar under the filters in tab view
             const extrasChips = document.getElementById('extrasChips');
@@ -3644,11 +3649,13 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                     { key: 'total_usage_12m', label: 'Total (' + totalMonthsGlobal + 'M)' },
                     { key: 'monthly_avg', label: 'Avg / Month' },
                 ]},
-                { id: 'forecast', label: 'Forecast' + locLabel, summary: 'forecast_6m', cols: [
+                (wsCustomM ? { id: 'forecast', label: 'Forecast (' + wsCustomM + 'M)' + locLabel, summary: 'forecast_custom', cols: [
+                    { key: 'forecast_custom', label: wsCustomM + 'M' },
+                ]} : { id: 'forecast', label: 'Forecast' + locLabel, summary: 'forecast_6m', cols: [
                     { key: 'forecast_3m', label: '3M' },
                     { key: 'forecast_6m', label: '6M' },
                     { key: 'forecast_12m', label: '12M' },
-                ]},
+                ]}),
             ];
             if (hasOrders) {
                 const stockCols = [{ key: 'avail_inv', label: 'Inventory' }];
@@ -3730,6 +3737,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                             case 'forecast_3m': return '<td class="forecast-val fc-3m">' + F(dv.forecast_3m) + '</td>';
                             case 'forecast_6m': return '<td class="forecast-val fc-6m">' + F(dv.forecast_6m) + '</td>';
                             case 'forecast_12m': return '<td class="forecast-val fc-12m">' + F(dv.forecast_12m) + '</td>';
+                            case 'forecast_custom': return '<td class="forecast-val fc-6m">' + F((dv.monthly_avg || 0) * wsCustomM) + '</td>';
                             case 'avail_inv': return invCellHtml(od, mm, tableExtras.gauge);
                             case 'sku_min': return '<td style="color:#6a1b9a;">' + (mm ? fmt(mm.min) : '-') + '</td>';
                             case 'sku_max': return '<td style="color:#6a1b9a;">' + (mm ? fmt(mm.max) : '-') + '</td>';
@@ -6549,6 +6557,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 buildContainerPlan();
                 if (wsTab === 'predicted') wsSelectTab('container');   // needs re-optimizing
             }
+            if (key === 'months' && wsMode && wsTab === 'results') renderTable();
             wsRenderFilterChips();
         }
         function wsSetCustomMonths(v) {
@@ -6567,11 +6576,16 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             const isPreset = months === 3 || months === 6 || months === 12;
             const pctEl = document.getElementById('containerPctInput');
             const pct = pctEl ? (parseFloat(pctEl.value) || 0) : 0;
+            // On Forecast Results the table already shows 3M/6M/12M columns, so the
+            // preset chips are meaningless there — dimmed until a custom month is
+            // entered (then they become the way back to the standard columns).
+            const presetDim = (wsTab === 'results' && isPreset) ? 'opacity:0.45;pointer-events:none;' : '';
             const hEl = document.getElementById('wsHorizonChips');
             if (hEl) hEl.innerHTML = '<span style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">'
+                + '<span style="display:flex;gap:5px;' + presetDim + '">'
                 + plannerChip(months === 3, "wsSetPlannerOpt('months','3')", '3M') + ' '
                 + plannerChip(months === 6, "wsSetPlannerOpt('months','6')", '6M') + ' '
-                + plannerChip(months === 12, "wsSetPlannerOpt('months','12')", '12M') + ' '
+                + plannerChip(months === 12, "wsSetPlannerOpt('months','12')", '12M') + '</span> '
                 + '<input type="number" min="0.5" max="60" step="0.1" value="' + (isPreset ? '' : months) + '" placeholder="e.g. 7.6"'
                 + ' onchange="wsSetCustomMonths(this.value)"'
                 + ' style="width:58px;padding:4px 6px;border-radius:6px;font-size:11.5px;border:1px solid ' + (isPreset ? '#ccc' : '#1a237e') + ';"></span>'
