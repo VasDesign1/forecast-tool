@@ -331,6 +331,9 @@
             justify-content: center; align-items: center;
         }
         .modal-overlay.active { display: flex; }
+        /* Planner vendor tiles: hover via class, never JS style mutation — rewriting the
+           style attribute breaks the themes' [style*=...] background remaps */
+        .pv-tile:hover { box-shadow: 0 3px 10px rgba(26,35,126,0.25); }
         /* Scrolling inside an open popup stays inside it — never chains to the pane behind */
         .modal-overlay, .modal-overlay [style*="overflow-y:auto"], .modal-overlay [style*="overflow-y: auto"],
         #plannerScroll, #plannerVendorScroll, #detailScroll, #detailListPane,
@@ -547,6 +550,7 @@
         #themePicker .opt.pavilion .bar { background: linear-gradient(90deg, #6e7d5e, #a88a4c); }
 
 
+
         /* ================= THEMES (full ports of the bc-sales-tool visual systems) ================= */
         /* ---- Theme: onyx (ported from bc-sales-tool) ---- */
         html.theme-onyx body { background: #0a0a0b; color: #f5f4f1; font-family: 'Inter', 'Segoe UI', sans-serif; }
@@ -582,6 +586,7 @@
         html.theme-onyx .signin-card p { color: #88837a; }
         html.theme-onyx .signin-card .big-btn, html.theme-onyx #themeBtn { background: #d4af7a; color: #0a0a0b; border-color: #d4af7a; }
         html.theme-onyx .import-badge { background: #d4af7a; color: #0a0a0b; }
+        html.theme-onyx .pv-tile:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.55); }
         html.theme-onyx .import-badge:hover, html.theme-onyx .import-badge.order-badge { background: #d4af7a; filter: brightness(1.1); }
         html.theme-onyx [style*="color:#1a237e"], html.theme-onyx [style*="color:#0d47a1"], html.theme-onyx [style*="color:#283593"], html.theme-onyx [style*="color:#3949ab"] { color: #d4af7a !important; }
         html.theme-onyx [style*="color: #1a237e"], html.theme-onyx [style*="color: #0d47a1"], html.theme-onyx [style*="color: #283593"], html.theme-onyx [style*="color: #3949ab"] { color: #d4af7a !important; }
@@ -638,6 +643,7 @@
         html.theme-linen .signin-card p { color: #6e6a60; }
         html.theme-linen .signin-card .big-btn, html.theme-linen #themeBtn { background: #5b6e3f; color: #f4f1eb; border-color: #5b6e3f; }
         html.theme-linen .import-badge { background: #5b6e3f; color: #f4f1eb; }
+        html.theme-linen .pv-tile:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.18); }
         html.theme-linen .import-badge:hover, html.theme-linen .import-badge.order-badge { background: #5b6e3f; filter: brightness(1.1); }
         html.theme-linen [style*="color:#1a237e"], html.theme-linen [style*="color:#0d47a1"], html.theme-linen [style*="color:#283593"], html.theme-linen [style*="color:#3949ab"] { color: #5b6e3f !important; }
         html.theme-linen [style*="color: #1a237e"], html.theme-linen [style*="color: #0d47a1"], html.theme-linen [style*="color: #283593"], html.theme-linen [style*="color: #3949ab"] { color: #5b6e3f !important; }
@@ -686,6 +692,7 @@
         html.theme-aurora .signin-card p { color: #9d99c8; }
         html.theme-aurora .signin-card .big-btn, html.theme-aurora #themeBtn { background: #b57bff; color: #08081b; border-color: #b57bff; }
         html.theme-aurora .import-badge { background: #b57bff; color: #08081b; }
+        html.theme-aurora .pv-tile:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.55); }
         html.theme-aurora .import-badge:hover, html.theme-aurora .import-badge.order-badge { background: #b57bff; filter: brightness(1.1); }
         html.theme-aurora [style*="color:#1a237e"], html.theme-aurora [style*="color:#0d47a1"], html.theme-aurora [style*="color:#283593"], html.theme-aurora [style*="color:#3949ab"] { color: #b57bff !important; }
         html.theme-aurora [style*="color: #1a237e"], html.theme-aurora [style*="color: #0d47a1"], html.theme-aurora [style*="color: #283593"], html.theme-aurora [style*="color: #3949ab"] { color: #b57bff !important; }
@@ -742,6 +749,7 @@
         html.theme-atelier .signin-card p { color: #555555; }
         html.theme-atelier .signin-card .big-btn, html.theme-atelier #themeBtn { background: #ff4400; color: #ffffff; border-color: #ff4400; }
         html.theme-atelier .import-badge { background: #ff4400; color: #ffffff; }
+        html.theme-atelier .pv-tile:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.18); }
         html.theme-atelier .import-badge:hover, html.theme-atelier .import-badge.order-badge { background: #ff4400; filter: brightness(1.1); }
         html.theme-atelier [style*="color:#1a237e"], html.theme-atelier [style*="color:#0d47a1"], html.theme-atelier [style*="color:#283593"], html.theme-atelier [style*="color:#3949ab"] { color: #ff4400 !important; }
         html.theme-atelier [style*="color: #1a237e"], html.theme-atelier [style*="color: #0d47a1"], html.theme-atelier [style*="color: #283593"], html.theme-atelier [style*="color: #3949ab"] { color: #ff4400 !important; }
@@ -804,6 +812,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         html.theme-concierge .signin-card p { color: #8a8474; }
         html.theme-concierge .signin-card .big-btn, html.theme-concierge #themeBtn { background: #0e4d3f; color: #f3eee5; border-color: #0e4d3f; }
         html.theme-concierge .import-badge { background: #0e4d3f; color: #f3eee5; }
+        html.theme-concierge .pv-tile:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.18); }
         html.theme-concierge .import-badge:hover, html.theme-concierge .import-badge.order-badge { background: #0e4d3f; filter: brightness(1.1); }
         html.theme-concierge [style*="color:#1a237e"], html.theme-concierge [style*="color:#0d47a1"], html.theme-concierge [style*="color:#283593"], html.theme-concierge [style*="color:#3949ab"] { color: #0e4d3f !important; }
         html.theme-concierge [style*="color: #1a237e"], html.theme-concierge [style*="color: #0d47a1"], html.theme-concierge [style*="color: #283593"], html.theme-concierge [style*="color: #3949ab"] { color: #0e4d3f !important; }
@@ -852,6 +861,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         html.theme-marble .signin-card p { color: #7c8797; }
         html.theme-marble .signin-card .big-btn, html.theme-marble #themeBtn { background: #1e3a5f; color: #f9fafb; border-color: #1e3a5f; }
         html.theme-marble .import-badge { background: #1e3a5f; color: #f9fafb; }
+        html.theme-marble .pv-tile:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.18); }
         html.theme-marble .import-badge:hover, html.theme-marble .import-badge.order-badge { background: #1e3a5f; filter: brightness(1.1); }
         html.theme-marble [style*="color:#1a237e"], html.theme-marble [style*="color:#0d47a1"], html.theme-marble [style*="color:#283593"], html.theme-marble [style*="color:#3949ab"] { color: #1e3a5f !important; }
         html.theme-marble [style*="color: #1a237e"], html.theme-marble [style*="color: #0d47a1"], html.theme-marble [style*="color: #283593"], html.theme-marble [style*="color: #3949ab"] { color: #1e3a5f !important; }
@@ -901,6 +911,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         html.theme-velvet .signin-card p { color: #a08a76; }
         html.theme-velvet .signin-card .big-btn, html.theme-velvet #themeBtn { background: #c9a04a; color: #1a0a0f; border-color: #c9a04a; }
         html.theme-velvet .import-badge { background: #c9a04a; color: #1a0a0f; }
+        html.theme-velvet .pv-tile:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.55); }
         html.theme-velvet .import-badge:hover, html.theme-velvet .import-badge.order-badge { background: #c9a04a; filter: brightness(1.1); }
         html.theme-velvet [style*="color:#1a237e"], html.theme-velvet [style*="color:#0d47a1"], html.theme-velvet [style*="color:#283593"], html.theme-velvet [style*="color:#3949ab"] { color: #c9a04a !important; }
         html.theme-velvet [style*="color: #1a237e"], html.theme-velvet [style*="color: #0d47a1"], html.theme-velvet [style*="color: #283593"], html.theme-velvet [style*="color: #3949ab"] { color: #c9a04a !important; }
@@ -957,6 +968,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         html.theme-glacier .signin-card p { color: #7d92ab; }
         html.theme-glacier .signin-card .big-btn, html.theme-glacier #themeBtn { background: #1b4f7e; color: #f6f9fb; border-color: #1b4f7e; }
         html.theme-glacier .import-badge { background: #1b4f7e; color: #f6f9fb; }
+        html.theme-glacier .pv-tile:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.18); }
         html.theme-glacier .import-badge:hover, html.theme-glacier .import-badge.order-badge { background: #1b4f7e; filter: brightness(1.1); }
         html.theme-glacier [style*="color:#1a237e"], html.theme-glacier [style*="color:#0d47a1"], html.theme-glacier [style*="color:#283593"], html.theme-glacier [style*="color:#3949ab"] { color: #1b4f7e !important; }
         html.theme-glacier [style*="color: #1a237e"], html.theme-glacier [style*="color: #0d47a1"], html.theme-glacier [style*="color: #283593"], html.theme-glacier [style*="color: #3949ab"] { color: #1b4f7e !important; }
@@ -1005,6 +1017,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         html.theme-bibliotheque .signin-card p { color: #8d7f68; }
         html.theme-bibliotheque .signin-card .big-btn, html.theme-bibliotheque #themeBtn { background: #7a1f2b; color: #f6efdd; border-color: #7a1f2b; }
         html.theme-bibliotheque .import-badge { background: #7a1f2b; color: #f6efdd; }
+        html.theme-bibliotheque .pv-tile:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.18); }
         html.theme-bibliotheque .import-badge:hover, html.theme-bibliotheque .import-badge.order-badge { background: #7a1f2b; filter: brightness(1.1); }
         html.theme-bibliotheque [style*="color:#1a237e"], html.theme-bibliotheque [style*="color:#0d47a1"], html.theme-bibliotheque [style*="color:#283593"], html.theme-bibliotheque [style*="color:#3949ab"] { color: #7a1f2b !important; }
         html.theme-bibliotheque [style*="color: #1a237e"], html.theme-bibliotheque [style*="color: #0d47a1"], html.theme-bibliotheque [style*="color: #283593"], html.theme-bibliotheque [style*="color: #3949ab"] { color: #7a1f2b !important; }
@@ -1054,6 +1067,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         html.theme-pavilion .signin-card p { color: #84887a; }
         html.theme-pavilion .signin-card .big-btn, html.theme-pavilion #themeBtn { background: #6e7d5e; color: #f9f5ec; border-color: #6e7d5e; }
         html.theme-pavilion .import-badge { background: #6e7d5e; color: #f9f5ec; }
+        html.theme-pavilion .pv-tile:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.18); }
         html.theme-pavilion .import-badge:hover, html.theme-pavilion .import-badge.order-badge { background: #6e7d5e; filter: brightness(1.1); }
         html.theme-pavilion [style*="color:#1a237e"], html.theme-pavilion [style*="color:#0d47a1"], html.theme-pavilion [style*="color:#283593"], html.theme-pavilion [style*="color:#3949ab"] { color: #6e7d5e !important; }
         html.theme-pavilion [style*="color: #1a237e"], html.theme-pavilion [style*="color: #0d47a1"], html.theme-pavilion [style*="color: #283593"], html.theme-pavilion [style*="color: #3949ab"] { color: #6e7d5e !important; }
@@ -2906,7 +2920,28 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         let includeSpecialItems = false;
         try { includeSpecialItems = localStorage.getItem('forecastIncludeSpecial') === '1'; } catch (e) {}
         function isSpecialItem(no) {
-            return /^(TDQ|TD\d|SM\d|SP\d|SPU|1000)/i.test(String(no || ''));
+            return /^(TDQ|TD\d|SMQ|SM\d|SPQ|SP\d|SPU|1000)/i.test(String(no || ''));
+        }
+        // Reordering Policy = "Order" (from the SKU cards): back-to-back items we never
+        // stock. Hidden by default unless they carry open sales-order quantity.
+        let hideReorderPolicyItems = true;
+        try { hideReorderPolicyItems = localStorage.getItem('forecastHideReorderPol') !== '0'; } catch (e) {}
+        function isPolicyOrderItem(itemNo) {
+            const map = locData.sku;
+            if (!map || !map[itemNo]) return false;
+            const byLoc = map[itemNo];
+            for (const l in byLoc) if (byLoc[l].pol) return true;
+            return false;
+        }
+        function hiddenByReorderPolicy(itemNo) {
+            if (!hideReorderPolicyItems || !isPolicyOrderItem(itemNo)) return false;
+            return !((getScopedOrderData(itemNo).salesQty || 0) > 0);   // keep only when a customer SO exists
+        }
+        function toggleReorderPolicy() {
+            hideReorderPolicyItems = !hideReorderPolicyItems;
+            try { localStorage.setItem('forecastHideReorderPol', hideReorderPolicyItems ? '1' : '0'); } catch (e) {}
+            applyFilters();
+            if (document.getElementById('plannerModal').classList.contains('active')) renderPlanner();
         }
         function onSpecialToggle() {
             includeSpecialItems = document.getElementById('specialItemsToggle').checked;
@@ -2921,6 +2956,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
 
             filteredData = allData.filter(item => {
                 if (!includeSpecialItems && isSpecialItem(item.item_no)) return false;
+                if (hiddenByReorderPolicy(item.item_no)) return false;
                 if (search) {
                     if (!item.item_no.toLowerCase().includes(search) &&
                         !item.description.toLowerCase().includes(search)) return false;
@@ -3428,6 +3464,8 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 extrasChips.innerHTML = plannerChip(!!tableExtras.minorder, "toggleTableExtra('minorder')", 'Order to Min')
                     + '<span style="display:inline-block;width:18px;"></span>'
                     + plannerChip(!!tableExtras.roundup, "toggleTableExtra('roundup')", 'Round up') + ' '
+                    + '<span title="Reordering Policy = Order items are back-to-back specials we never stock. ON: hidden unless they have open sales-order quantity. OFF: all shown.">'
+                    + plannerChip(hideReorderPolicyItems, 'toggleReorderPolicy()', 'Reorder policy') + '</span> '
                     + plannerChip(!!tableExtras.gauge, "toggleTableExtra('gauge')", 'Stock gauge') + ' '
                     + plannerChip(!!tableExtras.status, "toggleTableExtra('status')", 'Status');
             }
@@ -5164,6 +5202,8 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 if (forecast == null) forecast = Math.ceil((dv.monthly_avg || 0) * months);
                 if (!isFinite(forecast) || forecast < 0) forecast = 0;
                 const od = getScopedOrderData(d.item_no, pLocs);
+                // Back-to-back (policy=Order) items hide unless the PLANNER's scoped SO demands them
+                if (hideReorderPolicyItems && isPolicyOrderItem(d.item_no) && !((od.salesQty || 0) > 0)) continue;
                 // NOTE: zero forecast does NOT skip the item — committed sales
                 // orders alone can still demand stock, matching the container.
                 const net = Math.max(0, forecast + od.salesQty - od.availInv - od.purchQty);
@@ -5501,7 +5541,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                     const subPer = sub(v);
                     const isNone = v === '__none__';
                     const encKey = encodeURIComponent(v).replace(/'/g, '%27');
-                    html += '<div onclick="openPlannerVendor(\'' + encKey + '\')" style="cursor:pointer;background:' + (isNone ? '#f5f5f5' : '#e8eaf6') + ';border:1px solid ' + (isNone ? '#ddd' : '#c5cae9') + ';border-radius:10px;padding:10px 12px;transition:box-shadow 0.15s;" onmouseover="this.style.boxShadow=\'0 3px 10px rgba(26,35,126,0.25)\'" onmouseout="this.style.boxShadow=\'none\'">'
+                    html += '<div class="pv-tile" onclick="openPlannerVendor(\'' + encKey + '\')" style="cursor:pointer;background:' + (isNone ? '#f5f5f5' : '#e8eaf6') + ';border:1px solid ' + (isNone ? '#ddd' : '#c5cae9') + ';border-radius:10px;padding:10px 12px;transition:box-shadow 0.15s;">'
                         + '<div style="font-weight:700;color:#1a237e;font-size:13px;">' + (isNone ? 'No vendor' : esc(v)) + '</div>'
                         + '<div style="font-size:10px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + escAttr(isNone ? 'Items without an assigned vendor' : (vendorNames[v] || '')) + '">' + (isNone ? 'Unassigned items' : esc(vendorNames[v] || '&nbsp;')) + '</div>'
                         + '<div style="margin-top:6px;display:flex;justify-content:space-between;font-size:11px;"><span style="color:#888;">' + vRows.length + ' item' + (vRows.length === 1 ? '' : 's') + '</span><span style="font-weight:700;color:#e65100;">' + Math.round(subPer).toLocaleString() + ' / ' + (s.period === 'weekly' ? 'wk' : 'mo') + '</span></div>'

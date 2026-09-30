@@ -492,6 +492,7 @@ async function bcFetchLocationData() {
         const fMaxOrd = bcPickField(fields, ["Maximum_Order_Quantity", "maximumOrderQuantity"]);
         const fReord = bcPickField(fields, ["Reorder_Point", "reorderPoint"]);
         const fMult = bcPickField(fields, ["Order_Multiple", "orderMultiple"]);
+        const fPol = bcPickField(fields, ["Reordering_Policy", "reorderingPolicy"]);
         const fMaxInv = bcPickField(fields, ["Maximum_Inventory", "maximumInventory"]);
         console.log("SKU entity:", entity, "| item:", fItem, "loc:", fLoc,
             "minOrd:", fMinOrd, "maxOrd:", fMaxOrd, "reorderPt:", fReord, "maxInv:", fMaxInv, "orderMult:", fMult);
@@ -519,15 +520,18 @@ async function bcFetchLocationData() {
             const mn = fMin ? (parseFloat(r[fMin]) || 0) : 0;
             const mx = fMax ? (parseFloat(r[fMax]) || 0) : 0;
             const mult = fMultEff ? (parseFloat(r[fMultEff]) || 0) : 0;
-            if (mn === 0 && mx === 0 && mult === 0) continue;
+            // pol 1 = Reordering Policy "Order": back-to-back item, never stocked
+            const pol = fPol && String(r[fPol] || "").trim().toLowerCase() === "order" ? 1 : 0;
+            if (mn === 0 && mx === 0 && mult === 0 && pol === 0) continue;
             if (!sku[item]) sku[item] = {};
-            sku[item][loc] = { min: mn, max: mx, mult: mult };
+            sku[item][loc] = { min: mn, max: mx, mult: mult, pol: pol };
             kept++;
         }
         result.sku = sku;
         result.diagnostics.sku = rows.length + " SKUs via " + entity + ", " + kept + " with levels, using "
             + (useOrd ? (fMinOrd + "/" + fMaxOrd) : (fReord + "/" + fMaxInv))
-            + (fMultEff ? ", multiple from " + fMultEff : ", no multiple field");
+            + (fMultEff ? ", multiple from " + fMultEff : ", no multiple field")
+            + (fPol ? ", policy from " + fPol : ", no policy field");
     } catch (e) {
         result.diagnostics.sku = "unavailable — " + e.message;
         console.warn("Stockkeeping-unit fetch failed:", e.message);
