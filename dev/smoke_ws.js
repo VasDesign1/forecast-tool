@@ -47,7 +47,7 @@ __test.setMethod("standard");
 // Lanes tab: local vendor search hidden, group chip stays
 checks.push(["lanes tab selects", __test.wsSel("lanes") === "lanes"]);
 checks.push(["lanes summary hides local vendor search", __test.el("plannerSummary").indexOf("lanesVendorTyped") === -1]);
-checks.push(["group-by-vendor chip in extras area, not lanes summary", __test.el("wsExtrasChips").indexOf("lanesvendor") !== -1 && __test.el("plannerSummary").indexOf("toggleLanesByVendor") === -1]);
+checks.push(["Group-by pane active on lanes (button gone)", __test.el("wsGroupChips").indexOf("pointer-events:none") === -1 && __test.el("wsExtrasChips").indexOf("lanesvendor") === -1]);
 checks.push(["lanes hides local export (strip covers it)", __test.el("plannerSummary").indexOf("lanesExportCSV") === -1]);
 
 // Inline vendor drill-down (no popup in tab view)

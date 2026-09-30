@@ -4057,7 +4057,11 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             let totalMonthlyDemand = 0;
 
             const itemRows = [];
+            const pfLim = viewLimit('predicted');
+            let pfShown = 0;
             for (const d of containerPlanData) {
+                if (pfShown >= pfLim) break;
+                pfShown++;
                 const itemData = allData.find(i => i.item_no === d.itemNo);
                 if (!itemData) continue;
                 const dv = getDisplayValues(itemData, containerForecastMethod);
@@ -4288,7 +4292,8 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
 
                 // Build filterable and sortable rows
                 const displayRows = [];
-                for (let i = 0; i < containerPlanData.length; i++) {
+                const cLim = viewLimit('container');
+                for (let i = 0; i < Math.min(containerPlanData.length, cLim); i++) {
                     const d = containerPlanData[i];
                     if (isIcoolVendor && icoolSourceFilter !== 'all') {
                         const isLocal = ICOOL_LOCAL_ITEMS.has(d.itemNo);
@@ -5212,15 +5217,36 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         }
         // Priority Lanes view options: vendor filter + group-by-vendor display
         let lanesVendor = '';        // '' = all vendors, '__none__' = no vendor assigned
-        let lanesByVendor = false;
+
         let lanesOpenVendors = new Set();   // 'laneKey|vendorKey' — expanded vendor tiles
         let lanesShown = {};                // laneKey -> how many "Show rows" pages are visible
+        // Show-rows paging for the big tables (planner / vendor / container / predicted)
+        let viewPages = {};
+        function viewBase() { const el = document.getElementById('pageSize'); return parseInt(el && el.value) || 50; }
+        function viewLimit(k) { return viewBase() * (viewPages[k] || 1); }
+        function viewMoreRow(k, total, lim) {
+            if (total <= lim) return '';
+            return '<tr><td colspan="20" onclick="viewMore(' + "'" + k + "'" + ')" style="text-align:center;padding:8px;color:#3f51b5;cursor:pointer;font-weight:600;font-size:12px;border-bottom:1px solid #eee;">+'
+                + (total - lim).toLocaleString() + ' more - click to show ' + Math.min(viewBase(), total - lim).toLocaleString() + ' more</td></tr>';
+        }
+        function viewMore(k) {
+            viewPages[k] = (viewPages[k] || 1) + 1;
+            if (k === 'planner' || k === 'vendor') {
+                renderPlannerContent();
+                if (document.getElementById('plannerVendorModal').classList.contains('active')) renderPlannerVendorDetail();
+            } else if (k === 'container') {
+                renderContainerPlanTable(containerNoCubageItems);
+            } else if (k === 'predicted') {
+                showPredictedForecast();
+                if (wsMode) wsAdoptPredicted();
+            }
+        }
         function lanesLoadMore(k) {
             lanesShown[k] = (lanesShown[k] || 1) + 1;
             renderPlannerLanesView();
         }
         function setLanesVendor(v) { lanesVendor = v; lanesShown = {}; renderPlannerLanesView(); }
-        function toggleLanesByVendor() { lanesByVendor = !lanesByVendor; lanesOpenVendors.clear(); lanesShown = {}; renderPlannerLanesView(); wsRenderExtras(); }
+
         function toggleLaneVendor(encKey) {
             const k = decodeURIComponent(encKey);
             if (lanesOpenVendors.has(k)) lanesOpenVendors.delete(k); else lanesOpenVendors.add(k);
@@ -5333,12 +5359,14 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             plannerSort = { key: 'per', dir: 'desc' };
             plannerTab = 'planner';
             lanesVendor = '';
-            lanesByVendor = false;
             lanesOpenVendors.clear();
             lanesShown = {};
+            viewPages = {};
         }
         function setPlannerOpt(key, value) {
             plannerState[key] = key === 'months' ? parseFloat(value) : value;
+            viewPages = {};
+            if (key === 'group') { lanesOpenVendors.clear(); lanesShown = {}; }
             renderPlanner();
             if (document.getElementById('plannerVendorModal').classList.contains('active')) renderPlannerVendorDetail();
         }
@@ -5519,14 +5547,13 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             }
             // Same shared-column grid as the main controls bar so cluster edges align
             let ch = '<div class="cgrid" style="margin-bottom:10px;font-size:12px;">';
-            if (onPlannerTab) {
-                ch += '<div class="fgroup"><span><strong style="color:#555;">Period:</strong> '
+            ch += '<div class="fgroup">'
+                + (onPlannerTab ? '<span><strong style="color:#555;">Period:</strong> '
                     + plannerChip(s.period === 'weekly', "setPlannerOpt('period','weekly')", 'Weekly') + ' '
-                    + plannerChip(s.period === 'monthly', "setPlannerOpt('period','monthly')", 'Monthly') + '</span>'
-                    + '<span><strong style="color:#555;">Group by:</strong> '
-                    + plannerChip(s.group === 'vendor', "setPlannerOpt('group','vendor')", 'Vendor') + ' '
-                    + plannerChip(s.group === 'item', "setPlannerOpt('group','item')", 'Item') + '</span></div>';
-            }
+                    + plannerChip(s.period === 'monthly', "setPlannerOpt('period','monthly')", 'Monthly') + '</span>' : '')
+                + '<span><strong style="color:#555;">Group by:</strong> '
+                + plannerChip(s.group === 'vendor', "setPlannerOpt('group','vendor')", 'Vendor') + ' '
+                + plannerChip(s.group === 'item', "setPlannerOpt('group','item')", 'Item') + '</span></div>';
             if (allLocationsList.length > 0) {
                 ch += '<div class="fgroup"><strong style="color:#555;">Location:</strong> <span>'
                     + plannerChip(s.locations.length === 0, "togglePlannerLoc('')", 'All') + ' '
@@ -5703,8 +5730,8 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             };
             let h = '<tr' + (st ? ' style="box-shadow:inset 3px 0 0 ' + st.color + ';"' : '') + '>';
             h += '<td style="' + td + '"><a href="#" onclick="showItemDetail(\'' + escJS(r.itemNo) + '\');return false;" style="color:#1a237e;font-weight:600;text-decoration:underline;cursor:pointer;">' + esc(r.itemNo) + '</a></td>'
-               + '<td style="' + td + 'max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escAttr(r.description) + '">' + esc(r.description) + '</td>';
-            if (withVendor) h += '<td style="' + td + '">' + esc(r.vendorNo ? vendorDisplayLabel(r.vendorNo) : '-') + '</td>';
+               + '<td style="' + td + 'max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escAttr(r.description) + '">' + esc(r.description) + '</td>';
+            if (withVendor) h += '<td style="' + td + 'max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escAttr(r.vendorNo ? vendorDisplayLabel(r.vendorNo) : '') + '">' + esc(r.vendorNo ? vendorDisplayLabel(r.vendorNo) : '-') + '</td>';
             if (st) h += '<td style="' + td + '"><span style="background:' + st.color + '1a;color:' + st.color + ';font-weight:700;font-size:10px;padding:2px 8px;border-radius:10px;white-space:nowrap;">' + st.label + '</span></td>';
             const { grps } = plannerColDefs(withVendor);
             for (const g of grps) for (const c of plannerVisCols(g)) h += cell(c.key);
@@ -5727,10 +5754,11 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                     + fmtCeil(vRows.reduce((a, r) => a + r[perK], 0)) + '</strong> ' + plannerPerLabel().toLowerCase() + ' · '
                     + fmtCeil(vRows.reduce((a, r) => a + r.net, 0)) + ' net over ' + plannerState.months + ' months</span></div>';
                 document.getElementById('plannerSummary').innerHTML = sm;
+                const vLim = viewLimit('vendor');
                 let vh = vRows.length === 0
                     ? '<div style="padding:20px;text-align:center;color:#888;">Nothing to order from this vendor for the selected settings.</div>'
                     : '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">' + plannerTableHead(false)
-                        + vRows.map(r => plannerTableRow(r, false)).join('') + '</table></div>';
+                        + vRows.slice(0, vLim).map(r => plannerTableRow(r, false)).join('') + viewMoreRow('vendor', vRows.length, vLim) + '</table></div>';
                 document.getElementById('plannerContent').innerHTML = vh;
                 return;
             }
@@ -5759,8 +5787,10 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                     : 'Nothing to order — current stock and incoming purchase orders cover the ' + months + '-month forecast for every item.') + '</div>';
             } else if (s.group === 'item') {
                 plannerSortRows(rows);
+                const pLim = viewLimit('planner');
                 html += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">' + plannerTableHead(true);
-                for (const r of rows) html += plannerTableRow(r, true);
+                for (const r of rows.slice(0, pLim)) html += plannerTableRow(r, true);
+                html += viewMoreRow('planner', rows.length, pLim);
                 html += '</table></div>';
             } else {
                 // Vendor tiles — one small card per vendor, "No vendor" last.
@@ -5842,8 +5872,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                     + (lanesVendor ? '<span class="vendor-clear" onclick="setLanesVendor(\'\')">&times;</span>' : '')
                     + '<div class="vendor-dropdown" id="lanesVendorDD" onmousedown="event.preventDefault()"></div>'
                     + '</span> ')
-                + (wsMode ? '' : plannerChip(lanesByVendor, 'toggleLanesByVendor()', 'Group by vendor')
-                    + ' <button type="button" class="btn btn-outline" style="padding:6px 12px;font-size:12px;" onclick="lanesExportCSV()">Export CSV</button>')
+                + (wsMode ? '' : ' <button type="button" class="btn btn-outline" style="padding:6px 12px;font-size:12px;" onclick="lanesExportCSV()">Export CSV</button>')
                 + '</span>';
             sm += '</div>';
             document.getElementById('plannerSummary').innerHTML = sm;
@@ -5875,7 +5904,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                   + '<div style="padding:8px;">';
                 const laneBase = parseInt(document.getElementById('pageSize') && document.getElementById('pageSize').value) || 50;
                 const laneCap = laneBase * (lanesShown[key] || 1);
-                if (lanesByVendor) {
+                if (plannerState.group === 'vendor') {
                     // Vendor TILES (like the planner's), biggest vendors first; click a
                     // tile to expand that vendor's items inside this lane.
                     const buckets = new Map();
@@ -5952,6 +5981,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             // Tab view: drill into the vendor INLINE under the Order Planner tab, no popup
             if (wsMode) {
                 wsPlannerVendor = decodeURIComponent(encKey);
+                viewPages = {};
                 renderPlannerContent();
                 wsRenderExtras();
                 return;
@@ -6009,8 +6039,10 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             if (rows.length === 0) {
                 html += '<div style="padding:20px;text-align:center;color:#888;">Nothing to order from this vendor for the selected settings.</div>';
             } else {
+                const vpLim = viewLimit('vendor');
                 html += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">' + plannerTableHead(false);
-                for (const r of rows) html += plannerTableRow(r, false);
+                for (const r of rows.slice(0, vpLim)) html += plannerTableRow(r, false);
+                html += viewMoreRow('vendor', rows.length, vpLim);
                 html += '</table></div>';
             }
             document.getElementById('plannerVendorContent').innerHTML = html;
@@ -6474,6 +6506,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             }
             wsTab = t;
             wsPlannerVendor = null;
+            viewPages = {};
             if (t === 'planner' || t === 'lanes') {
                 wsAdoptPlanner();
                 wsSyncPlanner();
@@ -6561,8 +6594,9 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             wsRenderFilterChips();
         }
         function wsSetCustomMonths(v) {
-            setPlannerCustomMonths(v);
-            wsRenderFilterChips();
+            const n = parseFloat(v);
+            if (n >= 0.5 && n <= 60) wsSetPlannerOpt('months', n);
+            else wsRenderFilterChips();
         }
         function wsSetPct(v) {
             setContainerPct(parseFloat(v) || 0);
@@ -6617,8 +6651,6 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 toggleTableExtra('roundup');
             } else if (kind === 'reorderpol') {
                 toggleReorderPolicy();
-            } else if (kind === 'lanesvendor') {
-                toggleLanesByVendor();
             }
             wsRenderExtras();
         }
@@ -6638,7 +6670,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 + wrap(onResults || onPlanner || wsTab === 'lanes', plannerChip(hideReorderPolicyItems, "wsChipToggle('reorderpol')", 'Reorder policy'))
                 + wrap(onResults || plannerTableShown, plannerChip(gaugeOn, "wsChipToggle('gauge')", 'Stock gauge'))
                 + wrap(onResults || plannerTableShown, plannerChip(statusOn, "wsChipToggle('status')", 'Status'))
-                + wrap(wsTab === 'lanes', plannerChip(lanesByVendor, "wsChipToggle('lanesvendor')", 'Group by vendor'));
+                ;
         }
         function wsExportCSV() {
             if (wsTab === 'planner') return plannerExportCSV();
