@@ -478,6 +478,12 @@
         .ws-tab.disabled { opacity: 0.45; cursor: not-allowed; }
         .ws-tab:not(.active):not(.disabled):hover { border-color: #3f51b5; color: #3f51b5; }
         body.ws-mode #wsTabs { margin-bottom: -1px; position: relative; z-index: 2; }
+        body.ws-mode #wsTabs > span:last-child { margin-bottom: 7px; }
+        body.ws-mode #fgMethod, body.ws-mode #fgHorizon, body.ws-mode #fgPG { flex-wrap: nowrap; }
+        body.ws-mode #wsMethodChips, body.ws-mode #wsHorizonChips, body.ws-mode #wsPeriodChips, body.ws-mode #wsGroupChips { flex-wrap: nowrap !important; }
+        body.ws-mode #wsHorizonChips > span { flex-wrap: nowrap !important; }
+        body.ws-mode #wsMethodChips button, body.ws-mode #wsHorizonChips button, body.ws-mode #wsPeriodChips button,
+        body.ws-mode #wsGroupChips button, body.ws-mode #wsExtrasChips button { padding: 4px 9px !important; font-size: 11.5px !important; white-space: nowrap; }
         body.ws-mode #tableContainer, body.ws-mode #containerSection, body.ws-mode #wsContainerHint,
         body.ws-mode #wsPredictedHost, body.ws-mode #wsPlannerHost > #plannerCard { border-top-left-radius: 0 !important; }
 
@@ -1313,15 +1319,17 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                     </div>
                 </div>
                 <div class="fgroup" id="fgShow">
-                    <label>Show:</label>
-                    <select id="pageSize">
-                        <option value="25">25 rows</option>
-                        <option value="50" selected>50 rows</option>
-                        <option value="100">100 rows</option>
-                        <option value="250">250 rows</option>
-                        <option value="500">500 rows</option>
-                    </select>
                     <span id="wsExtrasChips" class="ws-only" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;"></span>
+                    <span style="display:flex;align-items:center;gap:8px;margin-left:auto;">
+                        <label>Show:</label>
+                        <select id="pageSize">
+                            <option value="25">25 rows</option>
+                            <option value="50" selected>50 rows</option>
+                            <option value="100">100 rows</option>
+                            <option value="250">250 rows</option>
+                            <option value="500">500 rows</option>
+                        </select>
+                    </span>
                 </div>
                 <div class="fgroup" id="fgSearch">
                     <label>Search:</label>
