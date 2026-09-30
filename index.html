@@ -416,19 +416,31 @@
         }
 
         /* ---------- TAB VIEW (workspace mode) ---------- */
-        #wsToggleBtn.on { background: rgba(255,255,255,0.85); color: #1a237e; font-weight: 700; }
+        /* iOS-style switch in the header */
+        .ws-switch { position: relative; display: inline-block; width: 36px; height: 19px; border-radius: 10px; background: rgba(255,255,255,0.32); transition: background 0.15s; flex-shrink: 0; }
+        .ws-switch .ws-knob { position: absolute; top: 2px; left: 2px; width: 15px; height: 15px; border-radius: 50%; background: white; transition: left 0.15s; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+        .ws-switch.on { background: #4caf50; }
+        .ws-switch.on .ws-knob { left: 19px; }
         .ws-only { display: none !important; }
         body.ws-mode .ws-only { display: flex !important; }
         body.ws-mode .ws-hide { display: none !important; }
-        body.ws-mode #topPanel { display: none; }
-        body.ws-mode.ws-top-open #topPanel { display: block; }
-        body.ws-mode #topChevron { display: block; }
+        #mainMethodWrap { display: contents; }
+        body.ws-mode #mainMethodWrap { display: none; }
+        /* Connection panel + stats collapse behind the chevron — in BOTH layouts */
+        #topPanel { display: none; }
+        body.top-open #topPanel { display: block; }
+        /* Tab view: give the Location cluster room, slim the loc buttons */
+        body.ws-mode .cgrid { grid-template-columns: minmax(280px, 0.95fr) minmax(400px, 1.35fr) minmax(230px, 0.9fr); }
+        body.ws-mode .loc-btn { padding: 6px 10px; }
+        /* Container tab: method + predicted/export buttons give way to the global filters and tab-strip exports */
+        body.ws-mode #containerMethodBtns, body.ws-mode #predictForecastBtn,
+        body.ws-mode #cExcelBtn, body.ws-mode #cPoBtn { display: none !important; }
         /* Planner card re-hosted inline: undo the popup sizing, hide popup chrome */
         #wsPlannerHost > #plannerCard {
             max-width: none !important; width: auto !important; height: auto !important;
             box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
         }
-        #wsPlannerHost #plannerHeadRow { display: none; }
+        #wsPlannerHost #plannerHeadRow { display: none !important; }
         #wsPlannerHost #plannerScroll { overflow-y: visible !important; }
         .ws-tab {
             padding: 9px 20px; border: 1px solid #c5cae9; border-bottom: none;
@@ -1154,8 +1166,9 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         </div>
         <!-- Centered so the import badges (top-right) can never cover it -->
         <button id="themeBtn" onclick="openThemePicker()" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.45);color:inherit;padding:7px 18px;border-radius:8px;cursor:pointer;font-size:13px;">Theme</button>
-        <button id="wsToggleBtn" onclick="toggleWorkspace()" title="Tab view: filters on top, everything else as tabs (Forecast, Container, Predicted, Planner, Lanes)"
-                style="position:absolute;left:calc(50% + 48px);top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.45);color:inherit;padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px;">Tab view</button>
+        <span id="wsToggleWrap" onclick="toggleWorkspace()" title="Tab view: filters on top, everything else as tabs (Forecast, Container, Predicted, Planner, Lanes)"
+              style="position:absolute;left:calc(50% + 52px);top:50%;transform:translateY(-50%);display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;font-weight:600;letter-spacing:0.4px;user-select:none;">
+            <span class="ws-switch" id="wsSwitch"><span class="ws-knob"></span></span> TAB VIEW</span>
     </div>
 
     <!-- Theme picker overlay -->
@@ -1173,8 +1186,8 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
 
     <div class="container">
         <!-- Tab view: the connection panel + stats collapse behind this chevron -->
-        <div id="topChevron" style="display:none;text-align:center;margin:-8px 0 12px;">
-            <button onclick="wsToggleTop()" id="topChevronBtn" style="background:white;border:1px solid #d6d8eb;border-radius:0 0 10px 10px;padding:3px 26px;cursor:pointer;font-size:13px;color:#555;box-shadow:0 2px 6px rgba(0,0,0,0.08);">&#x25BE;</button>
+        <div id="topChevron" style="text-align:center;margin:-8px 0 12px;">
+            <button onclick="wsToggleTop()" id="topChevronBtn" title="Show / hide the connection panel and data stats" style="background:white;border:1px solid #d6d8eb;border-radius:0 0 10px 10px;padding:3px 26px;cursor:pointer;font-size:13px;color:#555;box-shadow:0 2px 6px rgba(0,0,0,0.08);">&#x25BE;</button>
         </div>
         <div id="topPanel">
         <!-- Wiise / Business Central Connection Panel -->
@@ -1301,6 +1314,8 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             </div>
         </div>
 
+        <!-- Tab view: display-option chips for the active tab, right under the filters -->
+        <div id="wsExtrasBar" class="controls" style="display:none;padding:9px 16px;margin:-8px 0 14px;flex-direction:row;gap:8px;align-items:center;flex-wrap:wrap;"></div>
         <!-- Tab view: tab strip between filters and content -->
         <div id="wsTabs" style="display:none;margin-bottom:14px;align-items:center;gap:8px;flex-wrap:wrap;">
             <span id="wsTabBtns" style="display:flex;gap:8px;flex-wrap:wrap;"></span>
@@ -1316,6 +1331,14 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             <h3 style="color:#1a237e;margin-bottom:8px;">Container Planner</h3>
             <p style="font-size:13px;">Pick a vendor in the <strong>Vendor</strong> filter above to build a container plan (needs items with cubage data).</p>
         </div>
+        <!-- Styled message popup (replaces browser alerts in tab view flows) -->
+        <div class="modal-overlay" id="wsMsgModal" style="z-index:12000;" onmousedown="this._t=event.target" onmouseup="if(event.target===this&&this._t===this)closeWsMsg()">
+            <div style="background:white;border-radius:12px;padding:26px 30px;max-width:430px;width:92vw;box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+                <h3 id="wsMsgTitle" style="color:#1a237e;font-size:16px;margin-bottom:10px;"></h3>
+                <p id="wsMsgBody" style="font-size:13px;color:#555;line-height:1.55;margin-bottom:18px;"></p>
+                <div style="text-align:right;"><button class="btn btn-primary" style="padding:8px 22px;" onclick="closeWsMsg()">OK</button></div>
+            </div>
+        </div>
 
         <div class="table-container" id="tableContainer">
             <div class="no-data" id="noData">
@@ -1326,7 +1349,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 <h2>Forecast Results</h2>
                 <div class="method-btns">
                     <span id="extrasChips" style="margin-right:12px;"></span>
-                    <span id="mainMethodWrap" style="display:contents;">
+                    <span id="mainMethodWrap">
                     <span style="font-size:12px;font-weight:600;color:#888;">Method:</span>
                     <button class="method-btn active" data-method="standard" onclick="setForecastMethod('standard')">Standard
                         <span class="tooltip"><strong>Simple Moving Average</strong><br><br>Takes total usage over the entire data period, divides by number of months to get a monthly average, then multiplies by the forecast period. Best for items with stable, consistent demand patterns. This is the default method.<br><br><em>Example: 1,200 units sold over 12 months = 100/month avg. 3M forecast = 300 units.</em></span>
@@ -1387,8 +1410,8 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                     <button class="btn btn-outline" id="fillContainerBtn" style="padding:5px 10px;font-size:12px;" onclick="fillContainer()">Optimize Containers</button>
                     <button class="btn btn-outline" style="padding:5px 10px;font-size:12px;color:#1565c0;border-color:#1565c0;" id="predictForecastBtn" onclick="showPredictedForecast()">Predicted Forecast</button>
                     <button class="btn btn-outline" style="padding:5px 10px;font-size:12px;color:#c62828;border-color:#c62828;" onclick="resetContainerPlan()">Reset</button>
-                    <button class="btn btn-outline" style="padding:5px 10px;font-size:12px;color:#2e7d32;border-color:#2e7d32;" onclick="exportContainerExcel()">Export to Excel</button>
-                    <button class="btn btn-outline" style="padding:5px 10px;font-size:12px;color:#1565c0;border-color:#1565c0;" onclick="exportContainerPO()">Export to Excel for PO</button>
+                    <button class="btn btn-outline" id="cExcelBtn" style="padding:5px 10px;font-size:12px;color:#2e7d32;border-color:#2e7d32;" onclick="exportContainerExcel()">Export to Excel</button>
+                    <button class="btn btn-outline" id="cPoBtn" style="padding:5px 10px;font-size:12px;color:#1565c0;border-color:#1565c0;" onclick="exportContainerPO()">Export to Excel for PO</button>
                 </div>
             </div>
             <!-- Custom Forecast Pane for Container Planning -->
@@ -2561,6 +2584,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
 
                 document.getElementById('statsBar').style.display = 'flex';
                 document.getElementById('controlsBar').style.display = 'flex';
+                wsCollapseTop();   // data is in: tuck the connection panel behind the chevron
                 document.getElementById('noData').style.display = 'none';
                 document.getElementById('tableHeaderBar').style.display = 'flex';
                 document.getElementById('tableScroll').style.display = 'block';
@@ -3552,10 +3576,10 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             const hasOrders = Object.keys(orderData).length > 0;
             const hasSku = !!locData.sku;
 
-            // Optional-extras chips (Order to Min / Stock gauge / Status) live up in the header row
+            // Optional-extras chips: header row in classic, the bar under the filters in tab view
             const extrasChips = document.getElementById('extrasChips');
             if (extrasChips) {
-                extrasChips.innerHTML = plannerChip(!!tableExtras.minorder, "toggleTableExtra('minorder')", 'Order to Min')
+                extrasChips.innerHTML = wsMode ? '' : plannerChip(!!tableExtras.minorder, "toggleTableExtra('minorder')", 'Order to Min')
                     + '<span style="display:inline-block;width:18px;"></span>'
                     + plannerChip(!!tableExtras.roundup, "toggleTableExtra('roundup')", 'Round up') + ' '
                     + '<span title="Reordering Policy = Order items are back-to-back specials we never stock. ON: hidden unless they have open sales-order quantity. OFF: all shown.">'
@@ -3713,6 +3737,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             // Tab view: refresh tab states and enforce which section is visible
             wsRenderTabs();
             wsApplyTabView();
+            wsRenderExtras();
         }
 
         function renderContainerPlanning() {
@@ -3867,6 +3892,12 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
 
             containerOptimized = true;
             renderContainerPlanTable([]);
+            // Tab view: optimizing refreshes the Predicted Forecast tab automatically
+            if (wsMode) {
+                showPredictedForecast();
+                wsAdoptPredicted();
+                wsRenderTabs();
+            }
         }
 
         function fillUpToTarget(totalCbm, targetCbm) {
@@ -3945,7 +3976,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         }
         function showPredictedForecast() {
             if (!containerOptimized || containerPlanData.length === 0) {
-                alert('Please click "Optimize Containers" first to adjust quantities.');
+                wsMsg('Optimise the container first', 'The Predicted Forecast is built from the adjusted container quantities. Click "Optimize Containers" first, then the predicted forecast appears.');
                 return;
             }
 
@@ -5122,7 +5153,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         let lanesByVendor = false;
         let lanesOpenVendors = new Set();   // 'laneKey|vendorKey' — expanded vendor tiles
         function setLanesVendor(v) { lanesVendor = v; renderPlannerLanesView(); }
-        function toggleLanesByVendor() { lanesByVendor = !lanesByVendor; lanesOpenVendors.clear(); renderPlannerLanesView(); }
+        function toggleLanesByVendor() { lanesByVendor = !lanesByVendor; lanesOpenVendors.clear(); renderPlannerLanesView(); wsRenderExtras(); }
         function toggleLaneVendor(encKey) {
             const k = decodeURIComponent(encKey);
             if (lanesOpenVendors.has(k)) lanesOpenVendors.delete(k); else lanesOpenVendors.add(k);
@@ -5168,6 +5199,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             try { localStorage.setItem('forecastPlannerExtras', JSON.stringify(plannerExtras)); } catch (e) {}
             renderPlanner();
             if (document.getElementById('plannerVendorModal').classList.contains('active')) renderPlannerVendorDetail();
+            wsRenderExtras();
         }
         function plannerLocs() { return plannerState.locations; }
         function plannerLocLabel() { return plannerState.locations.join('+'); }
@@ -5401,13 +5433,8 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             // Tab view: period/group/location/horizon/method/search all live in the
             // tool-wide filter bar — here only the display chips and the scope note.
             if (wsMode) {
+                // Chips live in the bar under the filters; here only the scope note remains
                 let wch = '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:12px;font-size:12px;">';
-                if (onPlannerTab && s.group === 'item') {
-                    wch += plannerChip(!!plannerExtras.minorder, "togglePlannerExtra('minorder')", 'Order to Min')
-                        + '<span style="display:inline-block;width:14px;"></span>'
-                        + plannerChip(!!plannerExtras.gauge, "togglePlannerExtra('gauge')", 'Stock gauge') + ' '
-                        + plannerChip(!!plannerExtras.status, "togglePlannerExtra('status')", 'Status');
-                }
                 if (s.locations.length > 0) {
                     const wmiss = [];
                     if (!locData.inv) wmiss.push('branch stock');
@@ -5619,6 +5646,26 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
 
         function renderPlannerContent() {
             if (plannerTab === 'lanes') { renderPlannerLanesView(); return; }
+            // Tab view vendor drill-down: this vendor's schedule inline, with a way back
+            if (wsMode && wsPlannerVendor) {
+                const v = wsPlannerVendor;
+                const vRows = plannerSortRows(computePlannerRows().filter(r => (r.vendorNo || '__none__') === v));
+                const perK = plannerPerKey();
+                const label = v === '__none__' ? 'No vendor assigned' : vendorDisplayLabel(v);
+                let sm = '<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:12px;font-size:12px;">'
+                    + plannerChip(false, 'wsPlannerVendorBack()', '&larr; All vendors')
+                    + '<strong style="color:#1a237e;font-size:14px;">' + esc(label) + '</strong>'
+                    + '<span style="color:#666;">' + vRows.length + ' items · <strong style="color:#e65100;">'
+                    + fmtCeil(vRows.reduce((a, r) => a + r[perK], 0)) + '</strong> ' + plannerPerLabel().toLowerCase() + ' · '
+                    + fmtCeil(vRows.reduce((a, r) => a + r.net, 0)) + ' net over ' + plannerState.months + ' months</span></div>';
+                document.getElementById('plannerSummary').innerHTML = sm;
+                let vh = vRows.length === 0
+                    ? '<div style="padding:20px;text-align:center;color:#888;">Nothing to order from this vendor for the selected settings.</div>'
+                    : '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">' + plannerTableHead(false)
+                        + vRows.map(r => plannerTableRow(r, false)).join('') + '</table></div>';
+                document.getElementById('plannerContent').innerHTML = vh;
+                return;
+            }
             const s = plannerState;
             const months = s.months;
             const weeks = plannerWeeks(months);
@@ -5725,8 +5772,8 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                     + (lanesVendor ? '<span class="vendor-clear" onclick="setLanesVendor(\'\')">&times;</span>' : '')
                     + '<div class="vendor-dropdown" id="lanesVendorDD" onmousedown="event.preventDefault()"></div>'
                     + '</span> ')
-                + plannerChip(lanesByVendor, 'toggleLanesByVendor()', 'Group by vendor')
-                + (wsMode ? '' : ' <button type="button" class="btn btn-outline" style="padding:6px 12px;font-size:12px;" onclick="lanesExportCSV()">Export CSV</button>')
+                + (wsMode ? '' : plannerChip(lanesByVendor, 'toggleLanesByVendor()', 'Group by vendor')
+                    + ' <button type="button" class="btn btn-outline" style="padding:6px 12px;font-size:12px;" onclick="lanesExportCSV()">Export CSV</button>')
                 + '</span>';
             sm += '</div>';
             document.getElementById('plannerSummary').innerHTML = sm;
@@ -5828,11 +5875,23 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
 
         // ---- Single-vendor drill-down popup ----
         function openPlannerVendor(encKey) {
+            // Tab view: drill into the vendor INLINE under the Order Planner tab, no popup
+            if (wsMode) {
+                wsPlannerVendor = decodeURIComponent(encKey);
+                renderPlannerContent();
+                wsRenderExtras();
+                return;
+            }
             plannerVendorKey = decodeURIComponent(encKey);
             hideVendorContainerPlanner();
             applyVendorSize();
             renderPlannerVendorDetail();
             document.getElementById('plannerVendorModal').classList.add('active');
+        }
+        function wsPlannerVendorBack() {
+            wsPlannerVendor = null;
+            renderPlannerContent();
+            wsRenderExtras();
         }
         function closePlannerVendor() {
             hideVendorContainerPlanner();
@@ -6242,7 +6301,8 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         let wsMode = false;
         try { wsMode = localStorage.getItem('forecastWorkspace') === '1'; } catch (e) {}
         let wsTab = 'results';
-        let wsTopOpen = false;
+        let topOpen = true;              // connection panel: open before data loads, collapses after
+        let wsPlannerVendor = null;      // tab view: vendor drilled into inline (no popup)
         let wsPlannerHome = null;
         let wsPredictedHome = null;
         const WS_TABS = [
@@ -6255,22 +6315,24 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         function toggleWorkspace() {
             wsMode = !wsMode;
             try { localStorage.setItem('forecastWorkspace', wsMode ? '1' : '0'); } catch (e) {}
-            if (!wsMode) wsTab = 'results';
+            if (!wsMode) { wsTab = 'results'; wsPlannerVendor = null; }
             wsApply();
         }
         function wsToggleTop() {
-            wsTopOpen = !wsTopOpen;
-            if (document.body && document.body.classList) document.body.classList.toggle('ws-top-open', wsMode && wsTopOpen);
-            const b = document.getElementById('topChevronBtn');
-            if (b) b.innerHTML = wsTopOpen ? '&#x25B4;' : '&#x25BE;';
+            topOpen = !topOpen;
+            wsSyncTop();
         }
+        function wsSyncTop() {
+            if (document.body && document.body.classList) document.body.classList.toggle('top-open', topOpen);
+            const b = document.getElementById('topChevronBtn');
+            if (b) b.innerHTML = topOpen ? '&#x25B4;' : '&#x25BE;';
+        }
+        function wsCollapseTop() { topOpen = false; wsSyncTop(); }
         function wsApply() {
-            if (document.body && document.body.classList) {
-                document.body.classList.toggle('ws-mode', wsMode);
-                document.body.classList.toggle('ws-top-open', wsMode && wsTopOpen);
-            }
-            const tbtn = document.getElementById('wsToggleBtn');
-            if (tbtn && tbtn.classList) tbtn.classList.toggle('on', wsMode);
+            if (document.body && document.body.classList) document.body.classList.toggle('ws-mode', wsMode);
+            const sw = document.getElementById('wsSwitch');
+            if (sw && sw.classList) sw.classList.toggle('on', wsMode);
+            wsSyncTop();
             if (wsMode) {
                 wsAdoptPlanner();
             } else {
@@ -6278,9 +6340,10 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 wsReturnPlanner();
             }
             wsRenderFilterChips();
+            wsRenderExtras();
             if (allData.length > 0) {
                 if (wsMode && (wsTab === 'planner' || wsTab === 'lanes')) { wsSyncPlanner(); renderPlanner(); }
-                renderTable();   // its tail runs wsRenderTabs + wsApplyTabView
+                renderTable();   // its tail runs wsRenderTabs + wsApplyTabView + wsRenderExtras
             } else {
                 wsRenderTabs();
                 wsApplyTabView();
@@ -6315,9 +6378,28 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         function wsContainerReady() {
             return selectedVendor !== '' && Object.keys(uomData).length > 0 && filteredData.length > 0;
         }
+        function wsMsg(title, body) {
+            const t = document.getElementById('wsMsgTitle'), b = document.getElementById('wsMsgBody');
+            if (t) t.textContent = title;
+            if (b) b.textContent = body;
+            const m = document.getElementById('wsMsgModal');
+            if (m && m.classList) m.classList.add('active');
+        }
+        function closeWsMsg() {
+            const m = document.getElementById('wsMsgModal');
+            if (m && m.classList) m.classList.remove('active');
+        }
         function wsSelectTab(t) {
-            if (t === 'predicted' && !wsContainerReady()) return;
+            if (t === 'predicted') {
+                if (!wsContainerReady()) return;
+                if (!containerOptimized || containerPlanData.length === 0) {
+                    wsMsg('Optimise the container first',
+                        'The Predicted Forecast is built from the adjusted container quantities. Open the Container Planner tab and click "Optimize Containers" - this tab then fills in automatically.');
+                    return;
+                }
+            }
             wsTab = t;
+            wsPlannerVendor = null;
             if (t === 'planner' || t === 'lanes') {
                 wsAdoptPlanner();
                 wsSyncPlanner();
@@ -6331,6 +6413,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 wsReturnPredicted();
             }
             wsRenderFilterChips();
+            wsRenderExtras();
             wsRenderTabs();
             wsApplyTabView();
         }
@@ -6382,6 +6465,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         }
         function wsSetMethod(k) {
             plannerState.method = k;
+            if (wsMode) setContainerForecastMethod(k);   // container follows the global method too
             setForecastMethod(k);   // re-filters + re-renders the main table
             if (wsMode && (wsTab === 'planner' || wsTab === 'lanes')) renderPlanner();
             wsRenderFilterChips();
@@ -6394,22 +6478,31 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             setPlannerCustomMonths(v);
             wsRenderFilterChips();
         }
+        function wsSetPct(v) {
+            setContainerPct(v);
+            wsRenderFilterChips();
+        }
         function wsRenderFilterChips() {
             if (!wsMode) return;
             const mEl = document.getElementById('wsMethodChips');
             if (mEl) mEl.innerHTML = PLANNER_METHODS.map(x => plannerChip(selectedForecastMethod === x.key, "wsSetMethod('" + x.key + "')", x.label)).join('');
-            const en = (wsTab === 'planner' || wsTab === 'lanes');
-            const dim = en ? '' : 'opacity:0.45;pointer-events:none;';
             const months = plannerState.months;
             const isPreset = months === 3 || months === 6 || months === 12;
+            const pctEl = document.getElementById('containerPctInput');
+            const pct = pctEl ? (parseFloat(pctEl.value) || 0) : 0;
             const hEl = document.getElementById('wsHorizonChips');
-            if (hEl) hEl.innerHTML = '<span style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;' + dim + '">'
+            if (hEl) hEl.innerHTML = '<span style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">'
                 + plannerChip(months === 3, "wsSetPlannerOpt('months','3')", '3M') + ' '
                 + plannerChip(months === 6, "wsSetPlannerOpt('months','6')", '6M') + ' '
                 + plannerChip(months === 12, "wsSetPlannerOpt('months','12')", '12M') + ' '
                 + '<input type="number" min="0.5" max="60" step="0.1" value="' + (isPreset ? '' : months) + '" placeholder="e.g. 7.6"'
                 + ' onchange="wsSetCustomMonths(this.value)"'
-                + ' style="width:80px;padding:6px 8px;border-radius:6px;font-size:12px;border:1px solid ' + (isPreset ? '#ccc' : '#1a237e') + ';"></span>';
+                + ' style="width:74px;padding:6px 8px;border-radius:6px;font-size:12px;border:1px solid ' + (isPreset ? '#ccc' : '#1a237e') + ';">'
+                + '<span style="font-size:11px;color:#888;margin-left:8px;">Increase %:</span> '
+                + [0, 10, 20, 30, 50].map(x => plannerChip(pct === x && !!(pctEl && pctEl.value !== ''), "wsSetPct(" + x + ")", x === 0 ? '0%' : '+' + x + '%')).join(' ')
+                + '</span>';
+            const en = (wsTab === 'planner' || wsTab === 'lanes');
+            const dim = en ? '' : 'opacity:0.45;pointer-events:none;';
             const pEl = document.getElementById('wsPeriodChips');
             if (pEl) pEl.innerHTML = '<span style="display:flex;gap:5px;' + dim + '">'
                 + plannerChip(plannerState.period === 'weekly', "wsSetPlannerOpt('period','weekly')", 'Weekly') + ' '
@@ -6418,6 +6511,31 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             if (gEl) gEl.innerHTML = '<span style="display:flex;gap:5px;' + dim + '">'
                 + plannerChip(plannerState.group === 'vendor', "wsSetPlannerOpt('group','vendor')", 'Vendor') + ' '
                 + plannerChip(plannerState.group === 'item', "wsSetPlannerOpt('group','item')", 'Item') + '</span>';
+        }
+        // Display-option chips for the ACTIVE tab, in one bar under the filters
+        function wsRenderExtras() {
+            const bar = document.getElementById('wsExtrasBar');
+            if (!bar) return;
+            if (!wsMode) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+            let h = '';
+            if (wsTab === 'results') {
+                h = plannerChip(!!tableExtras.minorder, "toggleTableExtra('minorder')", 'Order to Min')
+                    + '<span style="display:inline-block;width:14px;"></span>'
+                    + plannerChip(!!tableExtras.roundup, "toggleTableExtra('roundup')", 'Round up') + ' '
+                    + '<span title="Reordering Policy = Order items hide unless they have open sales-order quantity.">'
+                    + plannerChip(hideReorderPolicyItems, 'toggleReorderPolicy()', 'Reorder policy') + '</span> '
+                    + plannerChip(!!tableExtras.gauge, "toggleTableExtra('gauge')", 'Stock gauge') + ' '
+                    + plannerChip(!!tableExtras.status, "toggleTableExtra('status')", 'Status');
+            } else if (wsTab === 'planner' && (plannerState.group === 'item' || wsPlannerVendor)) {
+                h = plannerChip(!!plannerExtras.minorder, "togglePlannerExtra('minorder')", 'Order to Min')
+                    + '<span style="display:inline-block;width:14px;"></span>'
+                    + plannerChip(!!plannerExtras.gauge, "togglePlannerExtra('gauge')", 'Stock gauge') + ' '
+                    + plannerChip(!!plannerExtras.status, "togglePlannerExtra('status')", 'Status');
+            } else if (wsTab === 'lanes') {
+                h = plannerChip(lanesByVendor, 'toggleLanesByVendor()', 'Group by vendor');
+            }
+            bar.innerHTML = h;
+            bar.style.display = h ? 'flex' : 'none';
         }
         function wsExportCSV() {
             if (wsTab === 'planner') return plannerExportCSV();
@@ -6430,7 +6548,9 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         // Close modals on Escape key
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
-                if (document.getElementById('colMapModal').classList.contains('active')) {
+                if (document.getElementById('wsMsgModal').classList.contains('active')) {
+                    closeWsMsg();
+                } else if (document.getElementById('colMapModal').classList.contains('active')) {
                     cancelColumnMap();
                 } else if (document.getElementById('advModal').classList.contains('active')) {
                     closeAdvModal();

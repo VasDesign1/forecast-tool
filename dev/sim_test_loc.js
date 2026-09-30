@@ -6,7 +6,7 @@ const elements = {};
 function makeEl(id) {
     return { id, value: "", textContent: "", innerHTML: "", checked: false, style: {}, dataset: {}, files: [],
         classList: { _s: new Set(), add(c) { this._s.add(c); }, remove(c) { this._s.delete(c); }, toggle() {}, contains(c) { return this._s.has(c); } },
-        addEventListener() {}, querySelectorAll: () => [], querySelector: () => makeEl(id + ">q"), appendChild() {}, closest: () => null, click() {},
+        addEventListener() {}, querySelectorAll: () => [], querySelector: () => makeEl(id + ">q"), appendChild() {}, closest: () => null, click() {}, remove() {}, insertBefore() {},
         setAttribute(k, v) { this["attr_" + k] = v; }, parentNode: { insertBefore() {} }, nextSibling: null };
 }
 global.window = global;

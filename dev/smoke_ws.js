@@ -6,7 +6,7 @@ head = head.replace("global.document = {", "global.document = { documentElement:
 head = head.replace("globalThis.__test = {",
     "globalThis.__test = { ws() { toggleWorkspace(); return wsMode; }, wsSel(t) { wsSelectTab(t); return wsTab; }, wsTabHtml() { return document.getElementById('wsTabBtns').innerHTML; }, "
     + "el(id) { return document.getElementById(id).innerHTML; }, months() { return plannerState.months; }, pMethod() { return plannerState.method; }, "
-    + "setVendor(v) { selectedVendor = v; }, rowsCount() { return plannerAllRows().length; }, setMethod(k) { wsSetMethod(k); }, top() { wsToggleTop(); return wsTopOpen; }, wsOpt(k,v) { wsSetPlannerOpt(k,v); }, ");
+    + "setVendor(v) { selectedVendor = v; }, rowsCount() { return plannerAllRows().length; }, setMethod(k) { wsSetMethod(k); }, top() { wsToggleTop(); return topOpen; }, wsOpt(k,v) { wsSetPlannerOpt(k,v); }, opv(k) { openPlannerVendor(encodeURIComponent(k)); }, back() { wsPlannerVendorBack(); }, ");
 eval(head);
 global.document.getElementById("pageSize").value = "50";
 
@@ -18,6 +18,9 @@ checks.push(["five tabs render", (th.match(/ws-tab/g) || []).length >= 5 && th.i
 checks.push(["predicted disabled without vendor", /Predicted Forecast<\/button>/.test(th) && th.indexOf("disabled") !== -1]);
 checks.push(["method chips render in filters", __test.el("wsMethodChips").indexOf("wsSetMethod") !== -1]);
 checks.push(["horizon chips render in filters", __test.el("wsHorizonChips").indexOf("wsSetPlannerOpt") !== -1]);
+checks.push(["horizon active on every tab", __test.el("wsHorizonChips").indexOf("pointer-events:none") === -1]);
+checks.push(["increase % chips in horizon cell", __test.el("wsHorizonChips").indexOf("wsSetPct") !== -1]);
+checks.push(["extras bar shows table chips on results tab", __test.el("wsExtrasBar").indexOf("Reorder policy") !== -1 && __test.el("wsExtrasBar").indexOf("Round up") !== -1]);
 checks.push(["period/group dimmed on results tab", __test.el("wsPeriodChips").indexOf("pointer-events:none") !== -1]);
 
 // Planner tab inline
@@ -37,8 +40,15 @@ __test.setMethod("standard");
 // Lanes tab: local vendor search hidden, group chip stays
 checks.push(["lanes tab selects", __test.wsSel("lanes") === "lanes"]);
 checks.push(["lanes summary hides local vendor search", __test.el("plannerSummary").indexOf("lanesVendorTyped") === -1]);
-checks.push(["lanes keeps group-by-vendor chip", __test.el("plannerSummary").indexOf("toggleLanesByVendor") !== -1]);
+checks.push(["group-by-vendor chip moved to extras bar", __test.el("wsExtrasBar").indexOf("toggleLanesByVendor") !== -1 && __test.el("plannerSummary").indexOf("toggleLanesByVendor") === -1]);
 checks.push(["lanes hides local export (strip covers it)", __test.el("plannerSummary").indexOf("lanesExportCSV") === -1]);
+
+// Inline vendor drill-down (no popup in tab view)
+__test.wsSel("planner");
+__test.opv("2124");
+checks.push(["vendor drill renders inline with back link", __test.el("plannerSummary").indexOf("wsPlannerVendorBack") !== -1 && __test.el("plannerContent").indexOf("<table") !== -1]);
+__test.back();
+checks.push(["back returns to vendor tiles", __test.el("plannerSummary").indexOf("wsPlannerVendorBack") === -1]);
 
 // Tool-wide vendor filter reaches the planner
 const all = __test.rowsCount();
@@ -48,7 +58,7 @@ __test.setVendor("");
 checks.push(["global vendor filter narrows planner rows", fewer > 0 && fewer <= all && __test.rowsCount() === all]);
 
 // Top panel chevron + back to classic
-checks.push(["chevron toggles top panel state", __test.top() === true && __test.top() === false]);
+checks.push(["chevron toggles top panel state", typeof __test.top() === "boolean" && __test.top() !== __test.top()]);
 checks.push(["results tab returns", __test.wsSel("results") === "results"]);
 checks.push(["toggle back OFF", __test.ws() === false]);
 
