@@ -3560,7 +3560,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
 
         // ---- Table extras: six independent toggles, remembered per device ----
         // Gauge + Status always start ON (Faik's rule) — no localStorage read here.
-        let tableExtras = { gauge: true, status: true, minorder: false, roundup: false };
+        let tableExtras = { gauge: true, status: true, minorder: false, roundup: true };
         function toggleTableExtra(k) {
             tableExtras[k] = !tableExtras[k];
             try { localStorage.setItem('forecastTableExtras', JSON.stringify(tableExtras)); } catch (e) {}
@@ -5765,8 +5765,10 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             // Live rows only, counted per vendor (for the filter dropdown), then filtered
             const alive = [];
             const vendCount = {};
+            const lq = (wsMode && plannerState.search) ? plannerState.search.toLowerCase() : '';
             for (const r of rows) {
                 if (r.monthlyAvg <= 0 && r.net <= 0 && r.availInv <= 0) continue;   // dead lines
+                if (lq && r.itemNo.toLowerCase().indexOf(lq) === -1 && (r.description || '').toLowerCase().indexOf(lq) === -1) continue;
                 alive.push(r);
                 const vk = r.vendorNo || '__none__';
                 vendCount[vk] = (vendCount[vk] || 0) + 1;
@@ -5838,6 +5840,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 h += '<div style="flex:1;min-width:0;background:#fafbfe;border:1px solid #e8eaf2;border-radius:10px;display:flex;flex-direction:column;">'
                   + '<div style="padding:9px 12px;border-bottom:2px solid ' + color + ';flex-shrink:0;"><span style="font-weight:700;color:' + color + ';font-size:12px;letter-spacing:1px;">' + label + '</span> <span style="font-size:11px;color:#999;">' + arr.length + ' · ' + hint + '</span></div>'
                   + '<div style="padding:8px;">';
+                const laneCap = parseInt(document.getElementById('pageSize') && document.getElementById('pageSize').value) || 50;
                 if (lanesByVendor) {
                     // Vendor TILES (like the planner's), biggest vendors first; click a
                     // tile to expand that vendor's items inside this lane.
@@ -5866,12 +5869,14 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                           + '</div>';
                         if (open) {
                             h += '<div style="margin:0 0 6px 10px;">';
-                            for (const e of items) h += card(e, key, color);
+                            for (const e of items.slice(0, laneCap)) h += card(e, key, color);
+                            if (items.length > laneCap) h += '<div style="text-align:center;font-size:11px;color:#999;padding:4px;">+' + (items.length - laneCap) + ' more — raise "Show" rows</div>';
                             h += '</div>';
                         }
                     }
                 } else {
-                    for (const e of arr) h += card(e, key, color);
+                    for (const e of arr.slice(0, laneCap)) h += card(e, key, color);
+                    if (arr.length > laneCap) h += '<div style="text-align:center;font-size:11px;color:#999;padding:4px;">+' + (arr.length - laneCap) + ' more — raise "Show" rows</div>';
                 }
                 if (arr.length === 0) h += '<div style="text-align:center;font-size:11px;color:#bbb;padding:10px;">None</div>';
                 h += '</div></div>';
@@ -6543,12 +6548,12 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 + plannerChip(months === 12, "wsSetPlannerOpt('months','12')", '12M') + ' '
                 + '<input type="number" min="0.5" max="60" step="0.1" value="' + (isPreset ? '' : months) + '" placeholder="e.g. 7.6"'
                 + ' onchange="wsSetCustomMonths(this.value)"'
-                + ' style="width:70px;padding:5px 7px;border-radius:6px;font-size:12px;border:1px solid ' + (isPreset ? '#ccc' : '#1a237e') + ';"></span>'
+                + ' style="width:58px;padding:4px 6px;border-radius:6px;font-size:11.5px;border:1px solid ' + (isPreset ? '#ccc' : '#1a237e') + ';"></span>'
                 + '<span style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">'
                 + '<span style="font-size:11px;color:#888;margin-left:6px;">Increase %:</span>'
                 + '<input type="number" min="0" step="1" value="' + escAttr(pctEl ? pctEl.value : '') + '" placeholder="e.g. 10"'
                 + ' onchange="wsSetPct(this.value)"'
-                + ' style="width:60px;padding:5px 7px;border-radius:6px;font-size:12px;border:1px solid #ccc;"> '
+                + ' style="width:50px;padding:4px 6px;border-radius:6px;font-size:11.5px;border:1px solid #ccc;"> '
                 + [0, 10, 20, 30, 50].map(x => plannerChip(pct === x && !!(pctEl && pctEl.value !== ''), "wsSetPct(" + x + ")", x === 0 ? '0%' : '+' + x + '%')).join(' ')
                 + '</span>';
             const en = (wsTab === 'planner' || wsTab === 'lanes');
