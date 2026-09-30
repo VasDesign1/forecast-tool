@@ -3067,7 +3067,12 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 vendorHighlightIdx = -1;
             }
         });
-        document.getElementById('pageSize').addEventListener('change', () => { currentPage = 1; renderTable(); document.getElementById('tableScroll').scrollTop = 0; });
+        document.getElementById('pageSize').addEventListener('change', () => {
+            currentPage = 1; renderTable(); document.getElementById('tableScroll').scrollTop = 0;
+            // Priority Lanes cap and its "+N more" footers follow Show - refresh live
+            if ((wsMode && (wsTab === 'lanes' || wsTab === 'planner'))
+                || document.getElementById('plannerModal').classList.contains('active')) renderPlanner();
+        });
 
         // Custom/special items (made-to-order lines): TDQ..., TD<number> (e.g. TD335862),
         // SM<number>, SP<number>, SPU/SPUQ..., 1000... — hidden unless the toggle is on.
