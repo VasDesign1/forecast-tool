@@ -26,6 +26,7 @@ checks.push(["period/group dimmed on results tab", __test.el("wsPeriodChips").in
 checks.push(["preset horizon chips dimmed on results", __test.el("wsHorizonChips").indexOf("pointer-events:none") !== -1]);
 __test.wsOpt("months", "7.5");
 checks.push(["custom month becomes the forecast column", __test.el("tableHead").indexOf("7.5M") !== -1 && __test.el("tableHead").indexOf("forecast_12m") === -1]);
+checks.push(["custom month also swaps net column", __test.el("tableHead").indexOf("net_custom") !== -1 && __test.el("tableHead").indexOf("net_12m") === -1]);
 checks.push(["preset chips reactivate with custom month", __test.el("wsHorizonChips").indexOf("pointer-events:none") === -1]);
 __test.wsOpt("months", "6");
 checks.push(["preset restores standard columns", __test.el("tableHead").indexOf("forecast_12m") !== -1]);

@@ -448,6 +448,8 @@
         body.ws-mode #fgVendor { grid-column: span 7; order: 8; }
         body.ws-mode .loc-btn { padding: 4px 10px !important; font-size: 11.5px !important; }
         body.ws-mode #containerSettingsPane { display: none !important; }
+        body.ws-mode #containerSection { margin-top: 0 !important; }
+        body.ws-mode #wsPredictedHost > #predictedForecastPanel { margin-top: 0 !important; }
         /* Compact filters in tab view */
         body.ws-mode #controlsBar { padding: 10px 14px; margin-bottom: 12px; }
         body.ws-mode .cgrid { gap: 6px 8px; }
@@ -3496,6 +3498,11 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             if (col === 'forecast_custom') {
                 return (getDisplayValues(item).monthly_avg || 0) * (plannerState.months || 6);
             }
+            if (col === 'net_custom') {
+                const dvc = getDisplayValues(item);
+                const odc = getScopedOrderData(item.item_no);
+                return Math.max(0, Math.ceil((dvc.monthly_avg || 0) * (plannerState.months || 6) + odc.salesQty - odc.availInv - odc.purchQty));
+            }
             if (col.startsWith('net_')) {
                 const dv = getDisplayValues(item);
                 const od = getScopedOrderData(item.item_no);
@@ -3669,6 +3676,10 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                         { key: 'net_min', label: 'Order Qty' },
                         { key: 'sku_mult', label: 'Multiple' },
                     ]});
+                } else if (wsCustomM) {
+                    groups.push({ id: 'net', label: 'Net to Purchase (' + wsCustomM + 'M)' + locLabel, summary: 'net_custom', cols: [
+                        { key: 'net_custom', label: wsCustomM + 'M' },
+                    ]});
                 } else {
                     groups.push({ id: 'net', label: 'Net to Purchase' + locLabel, summary: 'net_6m', cols: [
                         { key: 'net_3m', label: '3M' },
@@ -3738,6 +3749,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                             case 'forecast_6m': return '<td class="forecast-val fc-6m">' + F(dv.forecast_6m) + '</td>';
                             case 'forecast_12m': return '<td class="forecast-val fc-12m">' + F(dv.forecast_12m) + '</td>';
                             case 'forecast_custom': return '<td class="forecast-val fc-6m">' + F((dv.monthly_avg || 0) * wsCustomM) + '</td>';
+                            case 'net_custom': return '<td class="forecast-val fc-6m">' + fmt(od ? Math.max(0, Math.ceil((dv.monthly_avg || 0) * wsCustomM + od.salesQty - od.availInv - od.purchQty)) : 0) + '</td>';
                             case 'avail_inv': return invCellHtml(od, mm, tableExtras.gauge);
                             case 'sku_min': return '<td style="color:#6a1b9a;">' + (mm ? fmt(mm.min) : '-') + '</td>';
                             case 'sku_max': return '<td style="color:#6a1b9a;">' + (mm ? fmt(mm.max) : '-') + '</td>';
@@ -6595,7 +6607,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         }
         function wsSetCustomMonths(v) {
             const n = parseFloat(v);
-            if (n >= 0.5 && n <= 60) wsSetPlannerOpt('months', n);
+            if (n >= 0.5) wsSetPlannerOpt('months', n);
             else wsRenderFilterChips();
         }
         function wsSetPct(v) {
@@ -6613,14 +6625,16 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             // On Forecast Results the table already shows 3M/6M/12M columns, so the
             // preset chips are meaningless there — dimmed until a custom month is
             // entered (then they become the way back to the standard columns).
-            const presetDim = (wsTab === 'results' && isPreset) ? 'opacity:0.45;pointer-events:none;' : '';
+            const onResultsTab = wsTab === 'results';
+            const presetDim = (onResultsTab && isPreset) ? 'opacity:0.45;pointer-events:none;' : '';
+            const pOn = (m) => onResultsTab ? isPreset : months === m;
             const hEl = document.getElementById('wsHorizonChips');
             if (hEl) hEl.innerHTML = '<span style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">'
                 + '<span style="display:flex;gap:5px;' + presetDim + '">'
-                + plannerChip(months === 3, "wsSetPlannerOpt('months','3')", '3M') + ' '
-                + plannerChip(months === 6, "wsSetPlannerOpt('months','6')", '6M') + ' '
-                + plannerChip(months === 12, "wsSetPlannerOpt('months','12')", '12M') + '</span> '
-                + '<input type="number" min="0.5" max="60" step="0.1" value="' + (isPreset ? '' : months) + '" placeholder="e.g. 7.6"'
+                + plannerChip(pOn(3), "wsSetPlannerOpt('months','3')", '3M') + ' '
+                + plannerChip(pOn(6), "wsSetPlannerOpt('months','6')", '6M') + ' '
+                + plannerChip(pOn(12), "wsSetPlannerOpt('months','12')", '12M') + '</span> '
+                + '<input type="number" min="0.5" step="0.1" value="' + (isPreset ? '' : months) + '" placeholder="e.g. 7.6"'
                 + ' onchange="wsSetCustomMonths(this.value)"'
                 + ' style="width:58px;padding:4px 6px;border-radius:6px;font-size:11.5px;border:1px solid ' + (isPreset ? '#ccc' : '#1a237e') + ';"></span>'
                 + '<span style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">'
