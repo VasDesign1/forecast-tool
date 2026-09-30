@@ -105,6 +105,9 @@ def block(X, t):
     A("html.theme-%s .signin-card .big-btn, html.theme-%s #themeBtn { background: %s; color: %s; border-color: %s; }" % (X, X, t["acc"], t["accInk"], t["acc"]))
     A("html.theme-%s .import-badge { background: %s; color: %s; }" % (X, t["acc"], t["accInk"]))
     A("html.theme-%s .pv-tile:hover { box-shadow: 0 3px 10px rgba(0,0,0,%s); }" % (X, "0.55" if t["dark"] else "0.18"))
+    A("html.theme-%s .ws-tab { background: %s; color: %s; border-color: %s; }" % (X, t["panel"], t["tdInk"], t["line"]))
+    A("html.theme-%s .ws-tab.active { background: %s !important; color: %s !important; border-color: %s !important; }" % (X, t["acc"], t["accInk"], t["acc"]))
+    A("html.theme-%s #topChevronBtn { background: %s; color: %s; border-color: %s; }" % (X, t["panel"], t["mut"], t["line"]))
     A("html.theme-%s .import-badge:hover, html.theme-%s .import-badge.order-badge { background: %s; filter: brightness(1.1); }" % (X, X, t["acc"]))
     # Inline-style remap engine
     A(sel_list(X, NAVY, "color:%s") + " { color: %s !important; }" % t["acc"])
