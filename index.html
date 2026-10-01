@@ -3779,8 +3779,10 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                             default: return '<td>-</td>';
                         }
                     };
-                    html += '<tr' + (st ? ' style="box-shadow:inset 3px 0 0 ' + st.color + ';"' : '') + '>';
-                    html += '<td><strong><a href="#" onclick="showItemDetail(\'' + escJS(item.item_no) + '\');return false;" style="color:#1a237e;text-decoration:underline;cursor:pointer;">' + esc(item.item_no) + '</a></strong></td>';
+                    // Stripe goes on the sticky first cell - an inset shadow on the <tr>
+                    // hides behind the frozen columns' opaque backgrounds
+                    html += '<tr>';
+                    html += '<td' + (st ? ' style="box-shadow:inset 3px 0 0 ' + st.color + ';"' : '') + '><strong><a href="#" onclick="showItemDetail(\'' + escJS(item.item_no) + '\');return false;" style="color:#1a237e;text-decoration:underline;cursor:pointer;">' + esc(item.item_no) + '</a></strong></td>';
                     html += '<td>' + esc(item.description) + '</td>';
                     if (st) html += '<td><span style="background:' + st.color + '1a;color:' + st.color + ';font-weight:700;font-size:10px;padding:2px 8px;border-radius:10px;white-space:nowrap;">' + st.label + '</span></td>';
                     for (const g of groups) for (const c of visCols(g)) html += cell(c.key).replace('<td', '<td data-g="' + g.id + '"');
