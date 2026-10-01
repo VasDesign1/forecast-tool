@@ -18,12 +18,17 @@
 
         .header {
             background: linear-gradient(135deg, #1a237e, #283593);
-            color: white; padding: 20px 30px;
+            color: white; padding: 20px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.2);
         }
+        /* Same 1560px content box as the .container (1600 minus its padding), so the
+           title's left edge lines up exactly with the panes below on wide screens. */
         .header h1, .header .subtitle {
-            max-width: 1600px; margin-left: auto; margin-right: auto;
-            padding-left: max(calc((100vw - 1600px) / 2 + 20px - 30px), 84px);
+            max-width: 1560px; margin-left: auto; margin-right: auto;
+        }
+        @media (max-width: 1770px) {
+            /* Narrower windows: a fixed indent keeps the title clear of the controls */
+            .header h1, .header .subtitle { padding-left: 88px; }
         }
         .header h1 { font-size: 24px; font-weight: 600; }
         .header .subtitle { font-size: 13px; opacity: 0.8; margin-top: 4px; }
@@ -1203,8 +1208,8 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             <div class="subtitle">Upload item ledger entries to generate demand forecasts (v2.1 — Assembly Support — Wiise Connected)</div>
         </div>
         <!-- Centered so the import badges (top-right) can never cover it -->
-        <span id="hdrCtrls" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:7px;align-items:flex-start;">
-            <button id="themeBtn" onclick="openThemePicker()" style="background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.45);color:inherit;padding:5px 16px;border-radius:8px;cursor:pointer;font-size:12px;">Theme</button>
+        <span id="hdrCtrls" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:6px;align-items:flex-start;">
+            <button id="themeBtn" onclick="openThemePicker()" style="background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.45);color:inherit;padding:4px 12px;border-radius:8px;cursor:pointer;font-size:11.5px;">Theme</button>
             <span id="wsToggleWrap" onclick="toggleWorkspace()" title="Tab view: filters on top, everything else as tabs (Forecast, Container, Predicted, Planner, Lanes)"
                   style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-size:11px;font-weight:600;letter-spacing:0.4px;user-select:none;">
                 <span class="ws-switch" id="wsSwitch"><span class="ws-knob"></span></span> TAB VIEW</span>
@@ -3495,13 +3500,13 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 const mm = getSkuMinMax(item.item_no);
                 return mm && mm.mult > 1 ? mm.mult : -1;
             }
-            if (col === 'forecast_custom') {
-                return (getDisplayValues(item).monthly_avg || 0) * (plannerState.months || 6);
-            }
-            if (col === 'net_custom') {
-                const dvc = getDisplayValues(item);
+            if (col === 'forecast_custom' || col === 'net_custom') {
+                const pctIn = document.getElementById('containerPctInput');
+                const mlt = 1 + ((pctIn && parseFloat(pctIn.value)) || 0) / 100;
+                const fc = (getDisplayValues(item).monthly_avg || 0) * (plannerState.months || 6) * mlt;
+                if (col === 'forecast_custom') return fc;
                 const odc = getScopedOrderData(item.item_no);
-                return Math.max(0, Math.ceil((dvc.monthly_avg || 0) * (plannerState.months || 6) + odc.salesQty - odc.availInv - odc.purchQty));
+                return Math.max(0, Math.ceil(fc + odc.salesQty - odc.availInv - odc.purchQty));
             }
             if (col.startsWith('net_')) {
                 const dv = getDisplayValues(item);
@@ -3635,8 +3640,13 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             const locLabel = showLoc ? ' (Loc ' + locs.map(l => esc(l)).join('+') + ')' : '';
             const hasOrders = Object.keys(orderData).length > 0;
             const hasSku = !!locData.sku;
-            // Tab view: a CUSTOM Forecast Period (e.g. 7.6M) replaces the 3M/6M/12M columns
+            // Tab view: a CUSTOM Forecast Period (e.g. 7.6M) replaces the 3M/6M/12M columns,
+            // scaled by the global Increase % (same figure the container plan uses)
             const wsCustomM = (wsMode && plannerState.months && [3, 6, 12].indexOf(plannerState.months) === -1) ? plannerState.months : null;
+            const wsPctEl = document.getElementById('containerPctInput');
+            const wsPct = (wsMode && wsPctEl) ? (parseFloat(wsPctEl.value) || 0) : 0;
+            const wsMult = 1 + wsPct / 100;
+            const wsPctTag = (wsCustomM && wsPct > 0) ? ' +' + wsPct + '%' : '';
 
             // Optional-extras chips: header row in classic, the bar under the filters in tab view
             const extrasChips = document.getElementById('extrasChips');
@@ -3656,7 +3666,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                     { key: 'total_usage_12m', label: 'Total (' + totalMonthsGlobal + 'M)' },
                     { key: 'monthly_avg', label: 'Avg / Month' },
                 ]},
-                (wsCustomM ? { id: 'forecast', label: 'Forecast (' + wsCustomM + 'M)' + locLabel, summary: 'forecast_custom', cols: [
+                (wsCustomM ? { id: 'forecast', label: 'Forecast (' + wsCustomM + 'M' + wsPctTag + ')' + locLabel, summary: 'forecast_custom', cols: [
                     { key: 'forecast_custom', label: wsCustomM + 'M' },
                 ]} : { id: 'forecast', label: 'Forecast' + locLabel, summary: 'forecast_6m', cols: [
                     { key: 'forecast_3m', label: '3M' },
@@ -3677,7 +3687,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                         { key: 'sku_mult', label: 'Multiple' },
                     ]});
                 } else if (wsCustomM) {
-                    groups.push({ id: 'net', label: 'Net to Purchase (' + wsCustomM + 'M)' + locLabel, summary: 'net_custom', cols: [
+                    groups.push({ id: 'net', label: 'Net to Purchase (' + wsCustomM + 'M' + wsPctTag + ')' + locLabel, summary: 'net_custom', cols: [
                         { key: 'net_custom', label: wsCustomM + 'M' },
                     ]});
                 } else {
@@ -3748,8 +3758,8 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                             case 'forecast_3m': return '<td class="forecast-val fc-3m">' + F(dv.forecast_3m) + '</td>';
                             case 'forecast_6m': return '<td class="forecast-val fc-6m">' + F(dv.forecast_6m) + '</td>';
                             case 'forecast_12m': return '<td class="forecast-val fc-12m">' + F(dv.forecast_12m) + '</td>';
-                            case 'forecast_custom': return '<td class="forecast-val fc-6m">' + F((dv.monthly_avg || 0) * wsCustomM) + '</td>';
-                            case 'net_custom': return '<td class="forecast-val fc-6m">' + fmt(od ? Math.max(0, Math.ceil((dv.monthly_avg || 0) * wsCustomM + od.salesQty - od.availInv - od.purchQty)) : 0) + '</td>';
+                            case 'forecast_custom': return '<td class="forecast-val fc-6m">' + F((dv.monthly_avg || 0) * wsCustomM * wsMult) + '</td>';
+                            case 'net_custom': return '<td class="forecast-val fc-6m">' + fmt(od ? Math.max(0, Math.ceil((dv.monthly_avg || 0) * wsCustomM * wsMult + od.salesQty - od.availInv - od.purchQty)) : 0) + '</td>';
                             case 'avail_inv': return invCellHtml(od, mm, tableExtras.gauge);
                             case 'sku_min': return '<td style="color:#6a1b9a;">' + (mm ? fmt(mm.min) : '-') + '</td>';
                             case 'sku_max': return '<td style="color:#6a1b9a;">' + (mm ? fmt(mm.max) : '-') + '</td>';
@@ -6612,6 +6622,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         }
         function wsSetPct(v) {
             setContainerPct(parseFloat(v) || 0);
+            if (wsMode && wsTab === 'results') renderTable();   // custom-month columns scale with it
             wsRenderFilterChips();
         }
         function wsRenderFilterChips() {

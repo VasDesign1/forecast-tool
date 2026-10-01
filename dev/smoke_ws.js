@@ -6,7 +6,7 @@ head = head.replace("global.document = {", "global.document = { documentElement:
 head = head.replace("globalThis.__test = {",
     "globalThis.__test = { ws() { toggleWorkspace(); return wsMode; }, wsSel(t) { wsSelectTab(t); return wsTab; }, wsTabHtml() { return document.getElementById('wsTabBtns').innerHTML; }, "
     + "el(id) { return document.getElementById(id).innerHTML; }, months() { return plannerState.months; }, pMethod() { return plannerState.method; }, "
-    + "setVendor(v) { selectedVendor = v; }, rowsCount() { return plannerAllRows().length; }, setMethod(k) { wsSetMethod(k); }, top() { wsToggleTop(); return topOpen; }, wsOpt(k,v) { wsSetPlannerOpt(k,v); }, opv(k) { openPlannerVendor(encodeURIComponent(k)); }, back() { wsPlannerVendorBack(); }, ");
+    + "setVendor(v) { selectedVendor = v; }, rowsCount() { return plannerAllRows().length; }, setMethod(k) { wsSetMethod(k); }, top() { wsToggleTop(); return topOpen; }, wsOpt(k,v) { wsSetPlannerOpt(k,v); }, wsp(v) { wsSetPct(v); }, opv(k) { openPlannerVendor(encodeURIComponent(k)); }, back() { wsPlannerVendorBack(); }, ");
 eval(head);
 global.document.getElementById("pageSize").value = "50";
 
@@ -27,6 +27,9 @@ checks.push(["preset horizon chips dimmed on results", __test.el("wsHorizonChips
 __test.wsOpt("months", "7.5");
 checks.push(["custom month becomes the forecast column", __test.el("tableHead").indexOf("7.5M") !== -1 && __test.el("tableHead").indexOf("forecast_12m") === -1]);
 checks.push(["custom month also swaps net column", __test.el("tableHead").indexOf("net_custom") !== -1 && __test.el("tableHead").indexOf("net_12m") === -1]);
+__test.wsp(10);
+checks.push(["increase % scales custom columns live", __test.el("tableHead").indexOf("+10%") !== -1]);
+__test.wsp(0);
 checks.push(["preset chips reactivate with custom month", __test.el("wsHorizonChips").indexOf("pointer-events:none") === -1]);
 __test.wsOpt("months", "6");
 checks.push(["preset restores standard columns", __test.el("tableHead").indexOf("forecast_12m") !== -1]);
