@@ -611,8 +611,9 @@ async function bcFetchLocationData() {
 
 // 5) Cubage (CBM) per item unit of measure — feeds the Container Planner.
 //    Source: the published Item Units of Measure OData page (Code,
-//    Qty_per_Unit_of_Measure, Cubage). Fallback: Unit_Volume on the Items
-//    page, treated as per-EACH cubage. Only rows with cubage > 0 are kept,
+//    Qty_per_Unit_of_Measure, Cubage) — NOT published on this tenant as of
+//    2026-10. Then the item card's Unit Volume (m³ per base unit; on this
+//    tenant the extension field KBIZLCUnitVolume), treated as per-EACH. Only rows with cubage > 0 are kept,
 //    so the browser merges these OVER its baked-in table — anything Wiise
 //    doesn't have yet keeps the old figure. Never throws: cubage is
 //    optional and must not sink a load or a snapshot.
@@ -658,7 +659,7 @@ async function bcFetchItemUom() {
         const sample = await bcFetch(BC_ODATA_URL + "/Company('" + coName + "')/Items?$top=1");
         const fields = (sample.value && sample.value[0]) ? Object.keys(sample.value[0]) : [];
         const fNo = bcPickField(fields, ["No"]);
-        const fVol = bcPickField(fields, ["Unit_Volume", "unitVolume"]);
+        const fVol = bcPickField(fields, ["Unit_Volume", "KBIZLCUnitVolume", "unitVolume"]);
         if (!fNo || !fVol) throw new Error("Items page has no Unit_Volume field");
         const rows = await bcFetchAll(BC_ODATA_URL + "/Company('" + coName + "')/Items?$select=" + fNo + "," + fVol, "Item volumes");
         let added = 0;
