@@ -1485,7 +1485,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                     </div>
                     <div>
                         <label style="font-size:12px;font-weight:600;color:#555;">Increase %:</label><br>
-                        <input type="number" id="containerPctInput" value="" min="0" step="1" placeholder="e.g. 10" style="width:90px;padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;margin-top:4px;" onchange="buildContainerPlan()">
+                        <input type="number" id="containerPctInput" value="" min="0" step="1" placeholder="e.g. 10" style="width:90px;padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;margin-top:4px;" onchange="onIncreaseChanged()">
                     </div>
                     <div style="display:flex;gap:6px;margin-top:18px;">
                         <button class="btn btn-outline" style="padding:5px 12px;font-size:12px;" onclick="setContainerPct(0)">0%</button>
@@ -3514,12 +3514,12 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 return Math.max(0, Math.ceil(fc + odc.salesQty - odc.availInv - odc.purchQty));
             }
             if (col.startsWith('net_')) {
-                const dv = getDisplayValues(item);
+                const dv = withIncrease(getDisplayValues(item));
                 const od = getScopedOrderData(item.item_no);
                 const period = col.replace('net_', 'forecast_');
                 return Math.max(0, Math.ceil((dv[period] || 0) + od.salesQty - od.availInv - od.purchQty));
             }
-            const dv = getDisplayValues(item);
+            const dv = withIncrease(getDisplayValues(item));
             return dv[col] || 0;
         }
 
@@ -3651,7 +3651,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             const wsPctEl = document.getElementById('containerPctInput');
             const wsPct = (wsMode && wsPctEl) ? (parseFloat(wsPctEl.value) || 0) : 0;
             const wsMult = 1 + wsPct / 100;
-            const wsPctTag = (wsCustomM && wsPct > 0) ? ' +' + wsPct + '%' : '';
+            const wsPctTag = wsCustomM ? increaseTag() : '';
 
             // Optional-extras chips: header row in classic, the bar under the filters in tab view
             const extrasChips = document.getElementById('extrasChips');
@@ -3673,7 +3673,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 ]},
                 (wsCustomM ? { id: 'forecast', label: 'Forecast (' + wsCustomM + 'M' + wsPctTag + ')' + locLabel, summary: 'forecast_custom', cols: [
                     { key: 'forecast_custom', label: wsCustomM + 'M' },
-                ]} : { id: 'forecast', label: 'Forecast' + locLabel, summary: 'forecast_6m', cols: [
+                ]} : { id: 'forecast', label: 'Forecast' + increaseTag() + locLabel, summary: 'forecast_6m', cols: [
                     { key: 'forecast_3m', label: '3M' },
                     { key: 'forecast_6m', label: '6M' },
                     { key: 'forecast_12m', label: '12M' },
@@ -3711,7 +3711,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
 
             // Pre-compute per-row stats
             const rowsData = pageData.map(item => {
-                const dv = getDisplayValues(item);
+                const dv = withIncrease(getDisplayValues(item));
                 const od = hasOrders ? getScopedOrderData(item.item_no) : null;
                 const mm = (hasOrders && hasSku) ? getSkuMinMax(item.item_no) : null;
                 const net = (fc) => od ? Math.max(0, Math.ceil(fc + od.salesQty - od.availInv - od.purchQty)) : 0;
@@ -3856,7 +3856,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
 
         function setContainerPct(val) {
             document.getElementById('containerPctInput').value = val;
-            buildContainerPlan();
+            onIncreaseChanged();
         }
 
         function resetContainerPlan() {
@@ -3866,7 +3866,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             // Remove predicted forecast panel if present
             const panel = document.getElementById('predictedForecastPanel');
             if (panel) panel.remove();
-            buildContainerPlan();
+            onIncreaseChanged();
         }
 
         function buildContainerPlan() {
@@ -4417,8 +4417,36 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
 
         // ================= ALTERNATE VIEWS =================
         // Same data and maths as the table — different presentations.
+        // Global Increase % (the Forecast Period bar / container settings field).
+        // Scales FORECASTS only — usage history stays as actually happened.
+        function increasePct() {
+            const el = document.getElementById('containerPctInput');
+            return el ? (parseFloat(el.value) || 0) : 0;
+        }
+        function increaseTag() {
+            const p = increasePct();
+            return p > 0 ? ' +' + p + '%' : '';
+        }
+        function withIncrease(dv) {
+            const m = 1 + increasePct() / 100;
+            if (m === 1) return dv;
+            return Object.assign({}, dv, {
+                forecast_3m: Math.ceil((dv.forecast_3m || 0) * m * 100) / 100,
+                forecast_6m: Math.ceil((dv.forecast_6m || 0) * m * 100) / 100,
+                forecast_12m: Math.ceil((dv.forecast_12m || 0) * m * 100) / 100,
+            });
+        }
+        // Increase % changed anywhere → every screen that shows forecasts follows.
+        function onIncreaseChanged() {
+            buildContainerPlan();
+            if (allData.length) renderTable();
+            const pm = document.getElementById('plannerModal');
+            if ((wsMode && (wsTab === 'planner' || wsTab === 'lanes')) || (pm && pm.classList.contains('active'))) renderPlanner();
+            if (wsMode) wsRenderFilterChips();
+        }
+
         function rowStats(item) {
-            const dv = getDisplayValues(item);
+            const dv = withIncrease(getDisplayValues(item));
             const od = Object.keys(orderData).length > 0 ? getScopedOrderData(item.item_no) : null;
             const mm = (od && locData.sku) ? getSkuMinMax(item.item_no) : null;
             const net = (fc) => od ? Math.max(0, Math.ceil(fc + od.salesQty - od.availInv - od.purchQty)) : 0;
@@ -5447,6 +5475,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         // the planner itself keeps only rows with something to order.
         function plannerAllRows() {
             const months = plannerState.months;
+            const plannerMult = 1 + increasePct() / 100;
             const weeks = plannerWeeks(months);
             const rows = [];
             const pLocs = plannerLocs();
@@ -5457,6 +5486,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 const dv = getDisplayValues(d, plannerState.method, pLocs);
                 let forecast = dv['forecast_' + months + 'm'];
                 if (forecast == null) forecast = Math.ceil((dv.monthly_avg || 0) * months);
+                forecast = forecast * plannerMult;
                 if (!isFinite(forecast) || forecast < 0) forecast = 0;
                 const od = getScopedOrderData(d.item_no, pLocs);
                 // Back-to-back (policy=Order) items hide unless the PLANNER's scoped SO demands them
@@ -5670,7 +5700,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             if (withVendor) idCols.push({ key: 'vendorNo', label: 'Vendor' });
             if (plannerExtras.status) idCols.push({ key: 'status', label: 'Status' });
             const grps = [
-                { id: 'forecast', label: 'FORECAST', summary: 'forecast', cols: [{ key: 'forecast', label: plannerState.months + 'M' }] },
+                { id: 'forecast', label: 'FORECAST' + increaseTag(), summary: 'forecast', cols: [{ key: 'forecast', label: plannerState.months + 'M' }] },
             ];
             const stockCols = [{ key: 'availInv', label: 'On Hand' }];
             if (locData.sku) stockCols.push({ key: 'skuMin', label: 'Min' }, { key: 'skuMax', label: 'Max' });
@@ -5804,7 +5834,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             const locTag = s.locations.length ? ' · Loc ' + esc(plannerLocLabel()) : '';
             let sm = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;">';
             sm += '<div style="background:#e8eaf6;padding:8px 16px;border-radius:8px;text-align:center;"><div style="font-size:17px;font-weight:700;color:#1a237e;">' + rows.length.toLocaleString() + '</div><div style="font-size:10px;color:#666;">Items to Order' + locTag + '</div></div>';
-            sm += '<div style="background:#e8f5e9;padding:8px 16px;border-radius:8px;text-align:center;"><div style="font-size:17px;font-weight:700;color:#2e7d32;">' + Math.round(totalNet).toLocaleString() + '</div><div style="font-size:10px;color:#666;">Net Units over ' + months + 'M' + locTag + '</div></div>';
+            sm += '<div style="background:#e8f5e9;padding:8px 16px;border-radius:8px;text-align:center;"><div style="font-size:17px;font-weight:700;color:#2e7d32;">' + Math.round(totalNet).toLocaleString() + '</div><div style="font-size:10px;color:#666;">Net Units over ' + months + 'M' + increaseTag() + locTag + '</div></div>';
             sm += '<div style="background:#fff3e0;padding:8px 16px;border-radius:8px;text-align:center;"><div style="font-size:17px;font-weight:700;color:#e65100;">' + Math.round(totalPer).toLocaleString() + '</div><div style="font-size:10px;color:#666;">Units ' + (s.period === 'weekly' ? 'per Week (' + weeks + ' weeks)' : 'per Month') + locTag + '</div></div>';
             sm += '</div>';
             document.getElementById('plannerSummary').innerHTML = sm;
@@ -6162,7 +6192,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             const perKey = plannerPerKey();
             const perLabel = s.period === 'weekly' ? 'Order Per Week' : 'Order Per Month';
             const hasSku = !!locData.sku;
-            const lines = ['Vendor,Item No.,Description,Forecast ' + s.months + 'M,On Hand,' + (hasSku ? 'Min Qty,Max Qty,' : '') + 'On PO,On SO,Net To Order,' + perLabel];
+            const lines = ['Vendor,Item No.,Description,Forecast ' + s.months + 'M' + increaseTag() + ',On Hand,' + (hasSku ? 'Min Qty,Max Qty,' : '') + 'On PO,On SO,Net To Order,' + perLabel];
             for (const r of rows) {
                 const vend = r.vendorNo ? vendorDisplayLabel(r.vendorNo) : 'No vendor';
                 lines.push('"' + vend.replace(/"/g, '""') + '","' + r.itemNo.replace(/"/g, '""') + '","' + r.description.replace(/"/g, '""') + '",'
@@ -6202,14 +6232,15 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             const showLoc = locs.length > 0;
             const locLabel = showLoc ? ' (Loc ' + locs.join('+') + ')' : '';
 
-            let headers = ['Item No.', 'Description', 'Total Used (' + totalMonthsGlobal + 'M)' + locLabel, 'Monthly Avg' + locLabel, 'Forecast 3M' + locLabel, 'Forecast 6M' + locLabel, 'Forecast 12M' + locLabel];
+            const incTag = increaseTag();
+            let headers = ['Item No.', 'Description', 'Total Used (' + totalMonthsGlobal + 'M)' + locLabel, 'Monthly Avg' + locLabel, 'Forecast 3M' + incTag + locLabel, 'Forecast 6M' + incTag + locLabel, 'Forecast 12M' + incTag + locLabel];
 
             const hasOrders = Object.keys(orderData).length > 0;
             const hasSku = !!locData.sku;
             if (hasOrders) {
                 headers.push('Inventory' + locLabel);
                 if (hasSku) headers.push('Min Qty' + locLabel, 'Max Qty' + locLabel);
-                headers.push('Qty on Sales Order' + locLabel, 'Qty on Purch. Order' + locLabel, 'Net to Purchase 3M' + locLabel, 'Net to Purchase 6M' + locLabel, 'Net to Purchase 12M' + locLabel);
+                headers.push('Qty on Sales Order' + locLabel, 'Qty on Purch. Order' + locLabel, 'Net to Purchase 3M' + incTag + locLabel, 'Net to Purchase 6M' + incTag + locLabel, 'Net to Purchase 12M' + incTag + locLabel);
             }
 
             function csvSafe(s) {
@@ -6220,7 +6251,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
 
             let csv = headers.map(h => csvSafe(h)).join(',') + '\n';
             for (const item of filteredData) {
-                const dv = getDisplayValues(item);
+                const dv = withIncrease(getDisplayValues(item));
                 let row = [
                     csvSafe(item.item_no), csvSafe(item.description),
                     dv.total_usage_12m, Math.round(dv.monthly_avg * 100) / 100,
@@ -6642,9 +6673,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             else wsRenderFilterChips();
         }
         function wsSetPct(v) {
-            setContainerPct(parseFloat(v) || 0);
-            if (wsMode && wsTab === 'results') renderTable();   // custom-month columns scale with it
-            wsRenderFilterChips();
+            setContainerPct(parseFloat(v) || 0);   // re-renders table, planner, container
         }
         function wsRenderFilterChips() {
             if (!wsMode) return;
