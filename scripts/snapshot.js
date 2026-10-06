@@ -9,9 +9,9 @@
 // Env (from GitHub secrets):
 //   BC_CLIENT_ID, BC_TENANT, BC_REFRESH_TOKEN  — token exchange
 //   SNAPSHOT_PASSPHRASE                        — AES key material
-//   SLOT                                       — "0700" | "1200" | "1630"
-//                                                (empty = auto-detect from
-//                                                 Melbourne wall clock)
+//   SLOT                                       — "0500" | "1100" | "1700"
+//                                                (empty = fill whichever due
+//                                                 slot is missing today)
 //
 // Output — uploaded to SharePoint (scripts/sp-upload.js → SP_CONFIG in
 // bc-fetchers.js); local copy in ./snapshot-out/ for the Actions log.
@@ -81,33 +81,70 @@ function melbourneNow() {
              minutes: parseInt(g("hour"), 10) * 60 + parseInt(g("minute"), 10),
              hhmm: g("hour") + ":" + g("minute") };
 }
-const SLOTS = { "0700": 7 * 60, "1200": 12 * 60, "1630": 16 * 60 + 30 };
-// Every firing publishes — no run is wasted. GitHub crons run hours late
-// (the noon ones were landing ~15:00 Melbourne, and nearest-slot logic filed
-// them into the 1630 bin, starving 1200 for days). Rule: file the capture
-// into the most recent slot of the day. The menu always shows the REAL
-// capture time, so late captures are honestly labeled.
-//   06:00-10:59 → 0700 · 11:00-15:29 → 1200 · 15:30 onward → 1630
-//   00:00-05:59 → 1630 (overnight straggler = freshest data for the arvo bin)
-function detectSlot(mel) {
-    const m = mel.minutes;
-    if (m >= 15 * 60 + 30) return "1630";
-    if (m >= 11 * 60) return "1200";
-    if (m >= 6 * 60) return "0700";
-    return "1630";
+// ---------- Slots ----------
+// Three fixed slots a day on the Melbourne clock. The cron fires every
+// 30 minutes; each firing asks "which slot that is already due is still
+// missing today's capture?" and fills ONE of them — the current slot
+// first, then any earlier slot that missed — or exits in seconds. A slot
+// that already holds today's capture is never overwritten by the
+// schedule, so a cron GitHub runs hours late can no longer file a capture
+// into the wrong bin or leave one sitting on yesterday's data.
+//   deadline: once a slot is this late, a failed fill ends the run in
+//   failure (→ one email); before that a failure is quiet because the
+//   next firing retries anyway.
+const SLOTS = [
+    { slot: "0500", label: "Morning", due: 5 * 60,  deadline: 10 * 60 + 30 },
+    { slot: "1100", label: "Midday",  due: 11 * 60, deadline: 16 * 60 + 30 },
+    { slot: "1700", label: "Evening", due: 17 * 60, deadline: 22 * 60 + 30 },
+];
+// A slot holds today's capture when its meta says so and the capture
+// happened after the slot came due (a 04:30 manual fill is not the
+// 05:00 capture).
+function filledToday(meta, s, mel) {
+    if (!meta || !meta.fetchedAtMelbourne) return false;
+    const [d, t] = String(meta.fetchedAtMelbourne).split(" ");
+    if (d !== mel.date) return false;
+    const [h, m] = (t || "0:0").split(":").map(Number);
+    return ((h || 0) % 24) * 60 + (m || 0) >= s.due;
+}
+// Returns { s, reason } or null when there is nothing to do.
+async function chooseSlot(mel) {
+    const forced = (process.env.SLOT || "").trim();
+    if (forced) {
+        const s = SLOTS.find(x => x.slot === forced);
+        if (!s) throw new Error("Unknown slot '" + forced + "' — use " + SLOTS.map(x => x.slot).join(" / "));
+        return { s, reason: "forced by workflow input" };
+    }
+    const due = SLOTS.filter(s => s.due <= mel.minutes);
+    if (!due.length) { console.log("Melbourne " + mel.hhmm + " — before the first slot of the day, nothing to do."); return null; }
+    const current = due[due.length - 1];
+    // A manual "Run workflow" always refreshes the most recent slot.
+    if (process.env.GITHUB_EVENT_NAME === "workflow_dispatch") return { s: current, reason: "manual refresh" };
+    let metas;
+    try { metas = await SP.readSnapshotMetas(due.map(s => s.slot)); }
+    catch (e) {
+        console.warn("Cannot read slot state from SharePoint (" + e.message + ") — filling the current slot anyway");
+        return { s: current, reason: "slot state unknown" };
+    }
+    for (const s of due) {
+        const m = metas[s.slot];
+        console.log("  " + s.label + " (" + s.slot + "): " + (m && m.fetchedAtMelbourne ? "captured " + m.fetchedAtMelbourne : "no snapshot")
+            + (filledToday(m, s, mel) ? " ✓ today" : " — missing today"));
+    }
+    for (let i = due.length - 1; i >= 0; i--) {
+        if (!filledToday(metas[due[i].slot], due[i], mel)) return { s: due[i], reason: i === due.length - 1 ? "current slot" : "catch-up" };
+    }
+    console.log("Melbourne " + mel.hhmm + " — every due slot already holds today's capture, nothing to do.");
+    return null;
 }
 
+let chosen = null;   // visible to the failure handler below
 (async () => {
     const mel = melbourneNow();
-    let slot = (process.env.SLOT || "").trim();
-    if (!slot) {
-        slot = detectSlot(mel);
-        if (!slot) {
-            console.log("Melbourne time " + mel.hhmm + " is not near any slot — DST-offset cron firing, skipping.");
-            return;
-        }
-    }
-    if (!SLOTS[slot]) { console.error("Unknown slot '" + slot + "'"); process.exit(1); }
+    chosen = await chooseSlot(mel);
+    if (!chosen) return;
+    const slot = chosen.s.slot;
+    console.log("Filling " + chosen.s.label + " slot (" + slot + ") — " + chosen.reason);
 
     const from = F.WIISE_LEDGER_FROM;
     const to = mel.date;
@@ -129,8 +166,8 @@ function detectSlot(mel) {
     console.log("Cubage:", uom.diagnostics);
 
     // ---- Integrity checks (fail loudly rather than snapshot bad data) ----
-    if (ledger.rows.length === 0) { console.error("0 ledger rows — aborting snapshot"); process.exit(1); }
-    if (items.rows.length === 0) { console.error("0 items — aborting snapshot"); process.exit(1); }
+    if (ledger.rows.length === 0) throw new Error("0 ledger rows — aborting snapshot");
+    if (items.rows.length === 0) throw new Error("0 items — aborting snapshot");
     let dMin = "9999", dMax = "0000", outOfRange = 0;
     for (const r of ledger.rows) {
         const d = String(r["Posting Date"] || "").slice(0, 10);
@@ -140,8 +177,7 @@ function detectSlot(mel) {
     }
     console.log("[ledger check] postingDate " + dMin + " … " + dMax + " · beforeRangeStart=" + outOfRange);
     if (outOfRange > 0) {
-        console.error("[ledger check] " + outOfRange + " rows before " + from + " — server date filter ignored?! Aborting.");
-        process.exit(1);
+        throw new Error("[ledger check] " + outOfRange + " rows before " + from + " — server date filter ignored?! Aborting.");
     }
 
     const payload = {
@@ -183,6 +219,16 @@ function detectSlot(mel) {
     await SP.publishSnapshot(slot, bin, metaJson);
     console.log("Published " + slot + " to SharePoint");
 })().catch(e => {
-    console.error("SNAPSHOT FAILED:", e.message);
+    const mel = melbourneNow();
+    const manual = !!(process.env.SLOT || "").trim() || process.env.GITHUB_EVENT_NAME === "workflow_dispatch";
+    const late = chosen && mel.minutes >= chosen.s.deadline;
+    if (!manual && chosen && !late) {
+        // Quiet: the schedule fires again in 30 minutes and will retry this
+        // slot. Only a slot that is past its deadline fails the run (→ email).
+        console.warn("SNAPSHOT NOT PUBLISHED (" + chosen.s.label + "): " + e.message);
+        console.warn("Next firing retries; the run ends in failure only after " + String(Math.floor(chosen.s.deadline / 60)).padStart(2, "0") + ":" + String(chosen.s.deadline % 60).padStart(2, "0") + " Melbourne.");
+        return;
+    }
+    console.error("SNAPSHOT FAILED" + (chosen ? " (" + chosen.s.label + ")" : "") + ":", e.message);
     process.exit(1);
 });

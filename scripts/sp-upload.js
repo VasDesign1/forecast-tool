@@ -55,7 +55,16 @@ async function graphFetch(url, opts, attempt) {
     attempt = attempt || 0;
     const token = await graphToken();
     const headers = Object.assign({ Authorization: "Bearer " + token }, (opts && opts.headers) || {});
-    const resp = await fetch(url, Object.assign({}, opts, { headers }));
+    let resp;
+    try { resp = await fetch(url, Object.assign({}, opts, { headers })); }
+    catch (e) {
+        // A dropped connection throws instead of returning a status.
+        if (attempt >= 4) throw e;
+        const wait = 2000 * (attempt + 1);
+        console.log("  [graph] connection dropped (" + e.message + ") — retrying in " + wait + " ms");
+        await new Promise(r => setTimeout(r, wait));
+        return graphFetch(url, opts, attempt + 1);
+    }
     if ((resp.status === 429 || resp.status >= 500) && attempt < 4) {
         const wait = parseInt(resp.headers.get("Retry-After") || "0", 10) * 1000 || (2000 * (attempt + 1));
         console.log("  [graph] HTTP " + resp.status + " — retrying in " + wait + " ms");
@@ -79,10 +88,14 @@ function encPath(p) {
 }
 
 // The site's default document library ("Documents" / SHARED DOCUMENTS).
+// Resolved once per process: the slot check and the publish share it.
+let _driveId = null;
 async function resolveDrive(host) {
+    if (_driveId) return _driveId;
     const site = await graphJson(GRAPH + "/sites/" + host + ":/?$select=id,webUrl");
     const drive = await graphJson(GRAPH + "/sites/" + site.id + "/drive?$select=id,name,webUrl");
     console.log("  [graph] site " + site.webUrl + " · drive '" + drive.name + "' " + drive.id.slice(0, 12) + "…");
+    _driveId = drive.id;
     return drive.id;
 }
 
@@ -112,14 +125,23 @@ async function uploadLarge(driveId, itemPath, buf) {
         let resp;
         for (let attempt = 0; ; attempt++) {
             // Upload-session URLs are pre-authenticated: no Authorization header.
-            resp = await fetch(session.uploadUrl, {
-                method: "PUT",
-                headers: {
-                    "Content-Length": String(chunk.length),
-                    "Content-Range": "bytes " + start + "-" + (end - 1) + "/" + total,
-                },
-                body: chunk,
-            });
+            try {
+                resp = await fetch(session.uploadUrl, {
+                    method: "PUT",
+                    headers: {
+                        "Content-Length": String(chunk.length),
+                        "Content-Range": "bytes " + start + "-" + (end - 1) + "/" + total,
+                    },
+                    body: chunk,
+                });
+            } catch (e) {
+                // A dropped connection mid-chunk: resend the same chunk.
+                if (attempt >= 4) throw e;
+                const wait = 2000 * (attempt + 1);
+                console.log("  [graph] chunk " + start + "-" + (end - 1) + " connection dropped — retrying in " + wait + " ms");
+                await new Promise(r => setTimeout(r, wait));
+                continue;
+            }
             if (resp.ok || attempt >= 4) break;
             const wait = 2000 * (attempt + 1);
             console.log("  [graph] chunk " + start + "-" + (end - 1) + " HTTP " + resp.status + " — retrying in " + wait + " ms");
@@ -154,11 +176,26 @@ async function deleteFile(driveId, itemPath) {
     if (!resp.ok && resp.status !== 404) throw new Error("Delete " + itemPath + " → HTTP " + resp.status);
 }
 
+// Slot state for the robot's "which slot is missing today?" check:
+// { "0500": meta | null, ... } — null when the slot has never been published.
+async function readSnapshotMetas(slots) {
+    const driveId = await resolveDrive(SP_CONFIG.host);
+    const out = {};
+    for (const slot of slots) {
+        const resp = await graphFetch(itemUrl(driveId, SP_CONFIG.folder + "/snapshots/" + slot + ".meta.json") + ":/content");
+        if (resp.status === 404) { out[slot] = null; continue; }
+        if (!resp.ok) throw new Error("Read " + slot + ".meta.json → HTTP " + resp.status);
+        out[slot] = JSON.parse(await resp.text());
+    }
+    return out;
+}
+
 // Publish a finished snapshot: .bin first, .meta.json last so the menu
 // never advertises a slot whose bytes are still uploading.
-async function publishSnapshot(slot, bin, metaJson) {
+async function publishSnapshot(slot, bin, metaJson, glBin) {
     const driveId = await resolveDrive(SP_CONFIG.host);
     await uploadFile(driveId, SP_CONFIG.folder + "/snapshots/" + slot + ".bin", bin);
+    if (glBin) await uploadFile(driveId, SP_CONFIG.folder + "/snapshots/" + slot + ".gl.bin", glBin);
     await uploadFile(driveId, SP_CONFIG.folder + "/snapshots/" + slot + ".meta.json", Buffer.from(metaJson, "utf8"));
 }
 
@@ -177,7 +214,7 @@ async function selftest() {
     console.log("SELF-TEST PASSED");
 }
 
-module.exports = { resolveDrive, uploadFile, downloadFile, deleteFile, publishSnapshot, selftest };
+module.exports = { resolveDrive, uploadFile, downloadFile, deleteFile, readSnapshotMetas, publishSnapshot, selftest };
 
 if (require.main === module && process.argv.includes("--selftest")) {
     selftest().catch(e => { console.error("SELF-TEST FAILED:", e.message); process.exit(1); });

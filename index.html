@@ -1245,7 +1245,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                     <button class="btn btn-primary" id="bcConnectBtn" onclick="connectToWiise()" style="padding:10px 24px;font-size:14px;background:#1a237e;color:white;border:none;border-radius:6px;cursor:pointer;">Login &amp; Load All Data</button>
                     <span style="position:relative;display:inline-block;">
                         <button class="btn btn-primary" id="fastLookupBtn" style="padding:10px 18px;font-size:14px;background:#283593;color:white;border:none;border-radius:6px;cursor:pointer;"
-                            title="Fast lookup: opens pre-loaded snapshots of Wiise item ledger entries (from 01/05/2026), items and vendors, captured automatically at 7:00 AM, 12:00 and 4:30 PM Melbourne time. No sign-in needed — just the snapshot passphrase (asked once per device). Use Login &amp; Load All Data for live, right-now data.">Fast lookup ▾</button>
+                            title="Fast lookup: opens pre-loaded snapshots of Wiise item ledger entries (from 01/05/2026), items and vendors, captured automatically three times a day — Morning (from 5:00 AM), Midday (from 11:00 AM) and Evening (from 5:00 PM) Melbourne time. No sign-in needed — just the snapshot passphrase (asked once per device). Use Login &amp; Load All Data for live, right-now data.">Fast lookup ▾</button>
                         <div id="fastLookupMenu" style="display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:100;background:#fff;border:1px solid #d6d8eb;border-radius:10px;box-shadow:0 6px 24px rgba(26,35,126,0.18);min-width:250px;overflow:hidden;color:#2c2f4a;text-align:left;">
                             <div id="fastLookupMenuBody" style="font-size:13px;">
                                 <div style="padding:10px 14px;opacity:0.6;">Checking snapshots…</div>
@@ -6796,11 +6796,19 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             loc: "Location Code", entryType: "Entry Type", docType: "Document Type",
         };
         const NAV_DATA_FILE = "nav-data.bin";
+        // Three fixed slots a day; the robot fills each one once it is due
+        // (keep in sync with SLOTS in scripts/snapshot.js).
         const SNAPSHOT_SLOTS = [
-            { slot: "0700", label: "7:00 AM" },
-            { slot: "1200", label: "12:00 PM" },
-            { slot: "1630", label: "4:30 PM" },
+            { slot: "0500", label: "Morning", dueLabel: "5:00 AM", due: 5 * 60 },
+            { slot: "1100", label: "Midday",  dueLabel: "11:00 AM", due: 11 * 60 },
+            { slot: "1700", label: "Evening", dueLabel: "5:00 PM", due: 17 * 60 },
         ];
+        function melbourneMinutesNow() {
+            var parts = new Intl.DateTimeFormat("en-AU", { timeZone: "Australia/Melbourne",
+                hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date());
+            var g = function(t) { var p = parts.find(function(x) { return x.type === t; }); return parseInt((p && p.value) || "0", 10); };
+            return (g("hour") % 24) * 60 + g("minute");
+        }
 
         let wiiseLedgerCache = null;   // { rows, mapping } from live load or Fast lookup
         let navLedgerCache = null;     // decrypted NAV rows (canonical shape)
@@ -6942,18 +6950,24 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             var rows = await Promise.all(SNAPSHOT_SLOTS.map(async function(s) {
                 try {
                     var r = await spFetch("snapshots/" + s.slot + ".meta.json");
-                    return { slot: s.slot, label: s.label, meta: r.ok ? await r.json() : null };
-                } catch (e) { return { slot: s.slot, label: s.label, meta: null }; }
+                    return { slot: s.slot, label: s.label, dueLabel: s.dueLabel, due: s.due, meta: r.ok ? await r.json() : null };
+                } catch (e) { return { slot: s.slot, label: s.label, dueLabel: s.dueLabel, due: s.due, meta: null }; }
             }));
+            var nowMin = melbourneMinutesNow();
             body.innerHTML = rows.map(function(r, i) {
                 var css = "display:block;width:100%;text-align:left;padding:10px 14px;border:none;background:none;font-size:13px;color:inherit;"
                         + (i ? "border-top:1px solid #eef;" : "");
-                if (!r.meta) return '<div style="' + css + 'opacity:0.45;">As of ' + r.label + ' — no snapshot yet</div>';
+                if (!r.meta) return '<div style="' + css + 'opacity:0.45;">' + r.label + ' (' + r.dueLabel + ') — no snapshot yet</div>';
                 var capDate = (r.meta.fetchedAtMelbourne || "").slice(0, 10);
                 var capTime = (r.meta.fetchedAtMelbourne || "").slice(11).replace(/^24:/, "00:");
                 var day = capDate === today ? "today" : "on " + fmtDMY(capDate);
+                // A slot still on an older day after it came due today is flagged:
+                // the robot missed it (yesterday's capture is normal before then).
+                var stale = capDate !== today && nowMin >= r.due;
                 return '<button type="button" class="lookup-slot-opt" data-slot="' + r.slot + '" style="' + css
-                     + 'cursor:pointer;">As of ' + capTime + " " + day + "</button>";
+                     + 'cursor:pointer;" title="' + r.label + ' slot, captured from ' + r.dueLabel + ' Melbourne time">'
+                     + '<strong>' + r.label + '</strong> · as of ' + capTime + " " + day
+                     + (stale ? ' <span style="color:#e65100;" title="Not refreshed yet today">⚠</span>' : "") + "</button>";
             }).join("");
             body.querySelectorAll(".lookup-slot-opt").forEach(function(btn) {
                 btn.addEventListener("click", function(e) {
