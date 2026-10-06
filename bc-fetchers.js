@@ -609,12 +609,80 @@ async function bcFetchLocationData() {
     return result;
 }
 
+// 5) Cubage (CBM) per item unit of measure — feeds the Container Planner.
+//    Source: the published Item Units of Measure OData page (Code,
+//    Qty_per_Unit_of_Measure, Cubage). Fallback: Unit_Volume on the Items
+//    page, treated as per-EACH cubage. Only rows with cubage > 0 are kept,
+//    so the browser merges these OVER its baked-in table — anything Wiise
+//    doesn't have yet keeps the old figure. Never throws: cubage is
+//    optional and must not sink a load or a snapshot.
+//    Output: { map: { itemNo: { CODE: { q, c } } }, diagnostics: "..." }
+async function bcFetchItemUom() {
+    const coName = encodeURIComponent(BC_CONFIG.companyName);
+    const map = {};
+    const notes = [];
+    try {
+        const names = await bcListODataEntities();
+        const entity = names.find(n => /^itemunits?of?measures?$/i.test(n))
+            || names.find(n => /item.*unit.*measure|itemuom/i.test(n) && !/translation/i.test(n));
+        if (!entity) throw new Error("no Item Units of Measure page published in OData");
+        const base = BC_ODATA_URL + "/Company('" + coName + "')/" + entity;
+        const sample = await bcFetch(base + "?$top=1");
+        const fields = (sample.value && sample.value[0]) ? Object.keys(sample.value[0]) : [];
+        const fItem = bcPickField(fields, ["Item_No", "itemNo", "itemNumber"]);
+        const fCode = bcPickField(fields, ["Code", "code"]);
+        const fQty = bcPickField(fields, ["Qty_per_Unit_of_Measure", "qtyPerUnitOfMeasure", "Qty_per"]);
+        const fCub = bcPickField(fields, ["Cubage", "cubage"]);
+        console.log("Item UOM entity:", entity, "| item:", fItem, "code:", fCode, "qtyPer:", fQty, "cubage:", fCub);
+        if (!fItem || !fCode || !fCub) throw new Error("page " + entity + " lacks item/code/cubage fields (has: " + fields.join(",") + ")");
+        const rows = await bcFetchAll(base, "Item units of measure");
+        let kept = 0;
+        for (const r of rows) {
+            const item = String(r[fItem] || "").trim();
+            const code = String(r[fCode] || "").trim().toUpperCase();
+            const c = parseFloat(r[fCub]) || 0;
+            const q = fQty ? (parseFloat(r[fQty]) || 1) : 1;
+            if (!item || !code || c <= 0) continue;
+            if (!map[item]) map[item] = {};
+            map[item][code] = { q: q, c: c };
+            kept++;
+        }
+        notes.push(rows.length + " UOM rows via " + entity + ", " + kept + " with cubage");
+    } catch (e) {
+        notes.push("UOM page unavailable — " + e.message);
+        console.warn("Item UOM fetch failed:", e.message);
+    }
+
+    // Unit_Volume on the item card: fills items the UOM page left without cubage.
+    try {
+        const sample = await bcFetch(BC_ODATA_URL + "/Company('" + coName + "')/Items?$top=1");
+        const fields = (sample.value && sample.value[0]) ? Object.keys(sample.value[0]) : [];
+        const fNo = bcPickField(fields, ["No"]);
+        const fVol = bcPickField(fields, ["Unit_Volume", "unitVolume"]);
+        if (!fNo || !fVol) throw new Error("Items page has no Unit_Volume field");
+        const rows = await bcFetchAll(BC_ODATA_URL + "/Company('" + coName + "')/Items?$select=" + fNo + "," + fVol, "Item volumes");
+        let added = 0;
+        for (const r of rows) {
+            const item = String(r[fNo] || "").trim();
+            const c = parseFloat(r[fVol]) || 0;
+            if (!item || c <= 0 || map[item]) continue;
+            map[item] = { EACH: { q: 1, c: c } };
+            added++;
+        }
+        notes.push(added + " more from item-card " + fVol);
+    } catch (e) {
+        notes.push("item-card volume unavailable — " + e.message);
+    }
+
+    return { map: map, diagnostics: Object.keys(map).length + " items with cubage (" + notes.join("; ") + ")" };
+}
+
 // Node (snapshot robot) — browsers ignore this block.
 if (typeof module !== "undefined" && module.exports) {
     module.exports = {
         BC_CONFIG, BC_TENANT_DOMAIN, BC_API_BASE, BC_API_URL, BC_ODATA_URL, SP_CONFIG, GRAPH_SCOPES,
         WIISE_LEDGER_FROM,
         bcFetch, bcFetchAll, bcGetCompanyId, bcResetCompanyId,
-        bcFetchLedgerEntries, bcFetchItems, bcFetchVendors, bcFetchLocationData,
+        bcFetchLedgerEntries, bcFetchItems, bcFetchVendors, bcFetchLocationData, bcFetchItemUom,
     };
 }

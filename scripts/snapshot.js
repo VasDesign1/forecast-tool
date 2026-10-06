@@ -2,7 +2,7 @@
 // snapshot.js — the forecast tool's snapshot robot.
 // Runs in GitHub Actions (Node 20). Performs the SAME load the tool's
 // "Login & Load All Data" button does — item ledger entries from
-// 01/05/2026, item list, vendor mappings — via the shared
+// 01/05/2026, item list, vendor mappings, item cubage — via the shared
 // bc-fetchers.js, then gzips + encrypts the result for the Fast
 // lookup menu.
 //
@@ -114,17 +114,19 @@ function detectSlot(mel) {
     console.log("Snapshot slot " + slot + " · Melbourne " + mel.date + " " + mel.hhmm + " · ledger from " + from);
 
     const t0 = Date.now();
-    // Same four fetches, same shared code, as index.html connectToWiise().
-    const [ledger, items, vendors, locData] = await Promise.all([
+    // Same five fetches, same shared code, as index.html connectToWiise().
+    const [ledger, items, vendors, locData, uom] = await Promise.all([
         F.bcFetchLedgerEntries(),
         F.bcFetchItems(),
         F.bcFetchVendors(),
         F.bcFetchLocationData(),
+        F.bcFetchItemUom(),
     ]);
     console.log("Fetched in " + ((Date.now() - t0) / 1000).toFixed(1) + "s: "
         + ledger.rows.length + " ledger rows · " + items.rows.length + " items · "
         + vendors.rows.length + " vendor links");
     console.log("Branch data:", JSON.stringify(locData.diagnostics));
+    console.log("Cubage:", uom.diagnostics);
 
     // ---- Integrity checks (fail loudly rather than snapshot bad data) ----
     if (ledger.rows.length === 0) { console.error("0 ledger rows — aborting snapshot"); process.exit(1); }
@@ -150,7 +152,7 @@ function detectSlot(mel) {
             fetchedAtMelbourne: mel.date + " " + mel.hhmm,
             from, to,
         },
-        data: { ledger, items, vendors, locData },
+        data: { ledger, items, vendors, locData, uom },
     };
 
     const json = Buffer.from(JSON.stringify(payload), "utf8");
