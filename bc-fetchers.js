@@ -209,7 +209,7 @@ async function bcFetchLedgerEntries() {
 //     belt-and-braces guard.
 async function bcFetchLedgerEntriesV4() {
     const names = await bcListODataEntities();
-    const entity = names.find(n => /itemledger/i.test(n) && !/dimension|analysis/i.test(n));
+    const entity = bcPickItemLedgerEntity(names);
     if (!entity) throw new Error("no item-ledger page in OData $metadata");
     const coName = encodeURIComponent(BC_CONFIG.companyName);
     const base = BC_ODATA_URL + "/Company('" + coName + "')/" + entity;
@@ -404,6 +404,17 @@ async function bcListODataEntities() {
     return names;
 }
 
+// The real Item Ledger Entries page. A loose /itemledger/ match picked
+// GLItemLedgerRelation first (alphabetical) — a G/L↔value-entry link page
+// whose posting date can't be filtered, which silently sent every Wiise row
+// to "DEFAULT". Prefer the lean ItemLedgerEntries page (no running-balance
+// columns to compute), then the full Item_Ledger_Entries list page.
+function bcPickItemLedgerEntity(names) {
+    return names.find(n => /^itemledgerentries$/i.test(n))
+        || names.find(n => /^item_ledger_entries$/i.test(n))
+        || names.find(n => /itemledger/i.test(n) && !/dimension|analysis|^gl/i.test(n));
+}
+
 function bcPickField(fields, candidates) {
     for (var c = 0; c < candidates.length; c++) {
         var lower = candidates[c].toLowerCase();
@@ -555,7 +566,7 @@ async function bcFetchLocationData() {
             src = "v2.0 API";
         } else {
             const names = await bcListODataEntities();
-            const entity = names.find(n => /itemledger/i.test(n) && !/dimension|analysis/i.test(n));
+            const entity = bcPickItemLedgerEntity(names);
             if (!entity) throw new Error("v2.0 has no location field and no item-ledger page is published");
             const coName = encodeURIComponent(BC_CONFIG.companyName);
             const base = BC_ODATA_URL + "/Company('" + coName + "')/" + entity;
