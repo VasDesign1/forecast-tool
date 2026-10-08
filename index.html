@@ -1352,7 +1352,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                     <label>Vendor:</label>
                     <div class="vendor-search-wrap" style="flex:1;">
                         <input type="text" id="vendorSearchInput" placeholder="Search by vendor no. or name..." autocomplete="off"
-                               onfocus="openVendorDropdown()" oninput="filterVendorDropdown()" style="width:100%;">
+                               onfocus="openVendorDropdown()" oninput="vendorInputChanged()" style="width:100%;">
                         <span class="vendor-clear" id="vendorClear" style="display:none;" onclick="clearVendor()">&times;</span>
                         <div class="vendor-dropdown" id="vendorDropdown" onmousedown="event.preventDefault()"></div>
                     </div>
@@ -2134,10 +2134,40 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             document.getElementById('vendorDropdown').classList.add('open');
         }
 
+        // Typing in the box: emptying it drops the vendor filter straight away
+        // (no need to click the ×); otherwise just narrow the dropdown.
+        function vendorInputChanged() {
+            const input = document.getElementById('vendorSearchInput');
+            if (!input.value.trim() && selectedVendor) {
+                selectVendor('');
+                openVendorDropdown();   // still typing — keep the list open
+                return;
+            }
+            filterVendorDropdown();
+        }
+
+        // Leaving the box without picking: the text must never disagree with the
+        // active filter. Empty → all vendors; one clear match → that vendor;
+        // otherwise put the current vendor's name back.
+        function reconcileVendorInput() {
+            const input = document.getElementById('vendorSearchInput');
+            const typed = input.value.trim();
+            const current = selectedVendor ? vendorDisplayLabel(selectedVendor) : '';
+            if (typed === current) return;
+            if (!typed) { selectVendor(''); return; }
+            const q = typed.toLowerCase();
+            const exact = allVendorsList.find(v => v.toLowerCase() === q || vendorDisplayLabel(v).toLowerCase() === q);
+            const matches = exact ? [exact] : allVendorsList.filter(v => vendorMatchesQuery(v, q));
+            if (matches.length === 1) { selectVendor(matches[0]); return; }
+            input.value = current;
+            document.getElementById('vendorClear').style.display = selectedVendor ? 'inline' : 'none';
+        }
+
         function closeVendorDropdown() {
             vendorCloseTimeout = setTimeout(() => {
                 document.getElementById('vendorDropdown').classList.remove('open');
                 vendorHighlightIdx = -1;
+                reconcileVendorInput();
             }, 200);
         }
 
