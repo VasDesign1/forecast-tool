@@ -348,7 +348,9 @@
             content: ''; position: absolute; bottom: 100%; left: 20px;
             transform: none; border: 8px solid transparent; border-bottom-color: #1a237e;
         }
-        .method-btn:hover .tooltip { display: block; }
+        .method-btn:hover .tooltip { display: none; }   /* explanations live in Help mode (?) */
+        #helpBtn.on { background: #ffd54f !important; color: #1f2333 !important; border-color: #ffd54f !important; box-shadow: 0 0 0 3px rgba(255,213,79,0.35); }
+        body.help-mode { cursor: help; }
 
         /* Modal overlay for detail modal (BUG 8) */
         .modal-overlay {
@@ -681,7 +683,7 @@
         html.theme-onyx .signin-card { background: #141416; color: #f5f4f1; border: 1px solid #2a2820; }
         html.theme-onyx .signin-card h2 { color: #d4af7a; font-family: 'Cormorant Garamond', Georgia, serif; }
         html.theme-onyx .signin-card p { color: #88837a; }
-        html.theme-onyx .signin-card .big-btn, html.theme-onyx #themeBtn { background: #d4af7a; color: #0a0a0b; border-color: #d4af7a; }
+        html.theme-onyx .signin-card .big-btn, html.theme-onyx #themeBtn, html.theme-onyx #helpBtn { background: #d4af7a; color: #0a0a0b; border-color: #d4af7a; }
         html.theme-onyx .import-badge { background: #d4af7a; color: #0a0a0b; }
         html.theme-onyx .pv-tile:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.55); }
         html.theme-onyx .ws-tab { background: #141416; color: #c8c4bb; border-color: #2a2820; }
@@ -741,7 +743,7 @@
         html.theme-linen .signin-card { background: #faf8f2; color: #1a1a1a; border: 1px solid rgba(45,42,36,0.18); }
         html.theme-linen .signin-card h2 { color: #5b6e3f; font-family: 'Fraunces', Georgia, serif; }
         html.theme-linen .signin-card p { color: #6e6a60; }
-        html.theme-linen .signin-card .big-btn, html.theme-linen #themeBtn { background: #5b6e3f; color: #f4f1eb; border-color: #5b6e3f; }
+        html.theme-linen .signin-card .big-btn, html.theme-linen #themeBtn, html.theme-linen #helpBtn { background: #5b6e3f; color: #f4f1eb; border-color: #5b6e3f; }
         html.theme-linen .import-badge { background: #5b6e3f; color: #f4f1eb; }
         html.theme-linen .pv-tile:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.18); }
         html.theme-linen .ws-tab { background: #faf8f2; color: #1a1a1a; border-color: rgba(45,42,36,0.18); }
@@ -793,7 +795,7 @@
         html.theme-aurora .signin-card { background: #14142a; color: #eaeaf2; border: 1px solid rgba(255,255,255,0.12); }
         html.theme-aurora .signin-card h2 { color: #b57bff; font-family: 'Space Grotesk', sans-serif; }
         html.theme-aurora .signin-card p { color: #9d99c8; }
-        html.theme-aurora .signin-card .big-btn, html.theme-aurora #themeBtn { background: #b57bff; color: #08081b; border-color: #b57bff; }
+        html.theme-aurora .signin-card .big-btn, html.theme-aurora #themeBtn, html.theme-aurora #helpBtn { background: #b57bff; color: #08081b; border-color: #b57bff; }
         html.theme-aurora .import-badge { background: #b57bff; color: #08081b; }
         html.theme-aurora .pv-tile:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.55); }
         html.theme-aurora .ws-tab { background: #14142a; color: #eaeaf2; border-color: rgba(255,255,255,0.12); }
@@ -853,7 +855,7 @@
         html.theme-atelier .signin-card { background: #ffffff; color: #000000; border: 1px solid #000000; }
         html.theme-atelier .signin-card h2 { color: #ff4400; font-family: 'Space Grotesk', sans-serif; }
         html.theme-atelier .signin-card p { color: #555555; }
-        html.theme-atelier .signin-card .big-btn, html.theme-atelier #themeBtn { background: #ff4400; color: #ffffff; border-color: #ff4400; }
+        html.theme-atelier .signin-card .big-btn, html.theme-atelier #themeBtn, html.theme-atelier #helpBtn { background: #ff4400; color: #ffffff; border-color: #ff4400; }
         html.theme-atelier .import-badge { background: #ff4400; color: #ffffff; }
         html.theme-atelier .pv-tile:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.18); }
         html.theme-atelier .ws-tab { background: #ffffff; color: #000000; border-color: #000000; }
@@ -919,7 +921,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         html.theme-concierge .signin-card { background: #f3eee5; color: #2c2a26; border: 1px solid rgba(44,42,38,0.14); }
         html.theme-concierge .signin-card h2 { color: #0e4d3f; font-family: 'Fraunces', Georgia, serif; }
         html.theme-concierge .signin-card p { color: #8a8474; }
-        html.theme-concierge .signin-card .big-btn, html.theme-concierge #themeBtn { background: #0e4d3f; color: #f3eee5; border-color: #0e4d3f; }
+        html.theme-concierge .signin-card .big-btn, html.theme-concierge #themeBtn, html.theme-concierge #helpBtn { background: #0e4d3f; color: #f3eee5; border-color: #0e4d3f; }
         html.theme-concierge .import-badge { background: #0e4d3f; color: #f3eee5; }
         html.theme-concierge .pv-tile:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.18); }
         html.theme-concierge .ws-tab { background: #f3eee5; color: #2c2a26; border-color: rgba(44,42,38,0.14); }
@@ -971,7 +973,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         html.theme-marble .signin-card { background: #ffffff; color: #1c2833; border: 1px solid rgba(28,40,51,0.10); }
         html.theme-marble .signin-card h2 { color: #1e3a5f; font-family: 'Cormorant Garamond', Georgia, serif; }
         html.theme-marble .signin-card p { color: #7c8797; }
-        html.theme-marble .signin-card .big-btn, html.theme-marble #themeBtn { background: #1e3a5f; color: #f9fafb; border-color: #1e3a5f; }
+        html.theme-marble .signin-card .big-btn, html.theme-marble #themeBtn, html.theme-marble #helpBtn { background: #1e3a5f; color: #f9fafb; border-color: #1e3a5f; }
         html.theme-marble .import-badge { background: #1e3a5f; color: #f9fafb; }
         html.theme-marble .pv-tile:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.18); }
         html.theme-marble .ws-tab { background: #ffffff; color: #1c2833; border-color: rgba(28,40,51,0.10); }
@@ -1024,7 +1026,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         html.theme-velvet .signin-card { background: #2a1014; color: #f0e6d2; border: 1px solid rgba(201,160,74,0.18); }
         html.theme-velvet .signin-card h2 { color: #c9a04a; font-family: 'Cormorant Garamond', Georgia, serif; }
         html.theme-velvet .signin-card p { color: #a08a76; }
-        html.theme-velvet .signin-card .big-btn, html.theme-velvet #themeBtn { background: #c9a04a; color: #1a0a0f; border-color: #c9a04a; }
+        html.theme-velvet .signin-card .big-btn, html.theme-velvet #themeBtn, html.theme-velvet #helpBtn { background: #c9a04a; color: #1a0a0f; border-color: #c9a04a; }
         html.theme-velvet .import-badge { background: #c9a04a; color: #1a0a0f; }
         html.theme-velvet .pv-tile:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.55); }
         html.theme-velvet .ws-tab { background: #2a1014; color: #f0e6d2; border-color: rgba(201,160,74,0.18); }
@@ -1084,7 +1086,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         html.theme-glacier .signin-card { background: #f6f9fb; color: #1a2738; border: 1px solid rgba(26,39,56,0.10); }
         html.theme-glacier .signin-card h2 { color: #1b4f7e; font-family: 'Fraunces', Georgia, serif; }
         html.theme-glacier .signin-card p { color: #7d92ab; }
-        html.theme-glacier .signin-card .big-btn, html.theme-glacier #themeBtn { background: #1b4f7e; color: #f6f9fb; border-color: #1b4f7e; }
+        html.theme-glacier .signin-card .big-btn, html.theme-glacier #themeBtn, html.theme-glacier #helpBtn { background: #1b4f7e; color: #f6f9fb; border-color: #1b4f7e; }
         html.theme-glacier .import-badge { background: #1b4f7e; color: #f6f9fb; }
         html.theme-glacier .pv-tile:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.18); }
         html.theme-glacier .ws-tab { background: #f6f9fb; color: #1a2738; border-color: rgba(26,39,56,0.10); }
@@ -1136,7 +1138,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         html.theme-bibliotheque .signin-card { background: #f6efdd; color: #2a1c0e; border: 1px solid rgba(42,28,14,0.14); }
         html.theme-bibliotheque .signin-card h2 { color: #7a1f2b; font-family: 'Cormorant Garamond', Georgia, serif; }
         html.theme-bibliotheque .signin-card p { color: #8d7f68; }
-        html.theme-bibliotheque .signin-card .big-btn, html.theme-bibliotheque #themeBtn { background: #7a1f2b; color: #f6efdd; border-color: #7a1f2b; }
+        html.theme-bibliotheque .signin-card .big-btn, html.theme-bibliotheque #themeBtn, html.theme-bibliotheque #helpBtn { background: #7a1f2b; color: #f6efdd; border-color: #7a1f2b; }
         html.theme-bibliotheque .import-badge { background: #7a1f2b; color: #f6efdd; }
         html.theme-bibliotheque .pv-tile:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.18); }
         html.theme-bibliotheque .ws-tab { background: #f6efdd; color: #2a1c0e; border-color: rgba(42,28,14,0.14); }
@@ -1189,7 +1191,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         html.theme-pavilion .signin-card { background: #f9f5ec; color: #2e3329; border: 1px solid rgba(46,51,41,0.12); }
         html.theme-pavilion .signin-card h2 { color: #6e7d5e; font-family: 'Fraunces', Georgia, serif; }
         html.theme-pavilion .signin-card p { color: #84887a; }
-        html.theme-pavilion .signin-card .big-btn, html.theme-pavilion #themeBtn { background: #6e7d5e; color: #f9f5ec; border-color: #6e7d5e; }
+        html.theme-pavilion .signin-card .big-btn, html.theme-pavilion #themeBtn, html.theme-pavilion #helpBtn { background: #6e7d5e; color: #f9f5ec; border-color: #6e7d5e; }
         html.theme-pavilion .import-badge { background: #6e7d5e; color: #f9f5ec; }
         html.theme-pavilion .pv-tile:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.18); }
         html.theme-pavilion .ws-tab { background: #f9f5ec; color: #2e3329; border-color: rgba(46,51,41,0.12); }
@@ -1226,8 +1228,10 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         </div>
         <!-- Centered so the import badges (top-right) can never cover it -->
         <span id="hdrCtrls" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:6px;align-items:flex-start;">
-            <button id="themeBtn" onclick="openThemePicker()" style="background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.45);color:inherit;padding:4px 12px;border-radius:8px;cursor:pointer;font-size:11.5px;">Theme</button>
-            <span id="wsToggleWrap" onclick="toggleWorkspace()" title="Tab view: filters on top, everything else as tabs (Forecast, Container, Predicted, Planner, Lanes)"
+            <span style="display:inline-flex;align-items:center;gap:8px;"><button id="themeBtn" onclick="openThemePicker()" style="background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.45);color:inherit;padding:4px 12px;border-radius:8px;cursor:pointer;font-size:11.5px;">Theme</button>
+                <button id="helpBtn" type="button" onclick="toggleHelpMode()" aria-label="Help: hover anything to see what it means"
+                    style="background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.45);color:inherit;width:22px;height:22px;padding:0;border-radius:50%;cursor:pointer;font-size:12px;font-weight:700;line-height:20px;">?</button></span>
+            <span id="wsToggleWrap" onclick="toggleWorkspace()"
                   style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-size:11px;font-weight:600;letter-spacing:0.4px;user-select:none;">
                 <span class="ws-switch" id="wsSwitch"><span class="ws-knob"></span></span> TAB VIEW</span>
         </span>
@@ -1249,7 +1253,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
     <div class="container">
         <!-- Tab view: the connection panel + stats collapse behind this chevron -->
         <div id="topChevron">
-            <button onclick="wsToggleTop()" id="topChevronBtn" title="Show / hide the connection panel and data stats" style="background:white;border:1px solid #d6d8eb;border-radius:0 0 10px 10px;padding:3px 26px;cursor:pointer;font-size:13px;color:#555;box-shadow:0 2px 6px rgba(0,0,0,0.08);">&#x25BE;</button>
+            <button onclick="wsToggleTop()" id="topChevronBtn" style="background:white;border:1px solid #d6d8eb;border-radius:0 0 10px 10px;padding:3px 26px;cursor:pointer;font-size:13px;color:#555;box-shadow:0 2px 6px rgba(0,0,0,0.08);">&#x25BE;</button>
         </div>
         <div id="topPanel">
         <!-- Wiise / Business Central Connection Panel -->
@@ -1262,7 +1266,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                     <button class="btn btn-primary" id="bcConnectBtn" onclick="connectToWiise()" style="padding:10px 24px;font-size:14px;background:#1a237e;color:white;border:none;border-radius:6px;cursor:pointer;">Login &amp; Load All Data</button>
                     <span style="position:relative;display:inline-block;">
                         <button class="btn btn-primary" id="fastLookupBtn" style="padding:10px 18px;font-size:14px;background:#283593;color:white;border:none;border-radius:6px;cursor:pointer;"
-                            title="Fast lookup: opens pre-loaded snapshots of Wiise item ledger entries (from 01/05/2026), items and vendors, captured automatically three times a day — Morning (from 5:00 AM), Midday (from 11:00 AM) and Evening (from 5:00 PM) Melbourne time. No sign-in needed — just the snapshot passphrase (asked once per device). Use Login &amp; Load All Data for live, right-now data.">Fast lookup ▾</button>
+                            >Fast lookup ▾</button>
                         <div id="fastLookupMenu" style="display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:100;background:#fff;border:1px solid #d6d8eb;border-radius:10px;box-shadow:0 6px 24px rgba(26,35,126,0.18);min-width:250px;overflow:hidden;color:#2c2f4a;text-align:left;">
                             <div id="fastLookupMenuBody" style="font-size:13px;">
                                 <div style="padding:10px 14px;opacity:0.6;">Checking snapshots…</div>
@@ -1276,7 +1280,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                         <input type="checkbox" id="navDataToggle" onchange="onNavToggle()"> Include old NAV data
                     </label>
                     <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#444;cursor:pointer;user-select:none;padding:6px 4px;"
-                           title="Custom / special items: TDQ…, TD+number (e.g. TD335862), SM…, SP…, SPU/SPUQ…, 1000…. Hidden by default so stock lines stay tidy.">
+>
                         <input type="checkbox" id="specialItemsToggle" onchange="onSpecialToggle()"> Include custom/special items
                     </label>
                 </div>
@@ -3890,7 +3894,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             for (const g of groups) {
                 const open = colGroupsOpen[g.id];
                 h += '<th class="col-group" data-g="' + g.id + '" colspan="' + visCols(g).length + '" onclick="toggleColGroup(\'' + g.id + '\')"'
-                   + ' title="' + (open ? 'Click to collapse' : 'Click to show all ' + g.cols.length + ' columns') + '">'
+                   + '>'
                    + (open ? '&#x25BE; ' : '&#x25B8; ') + g.label
                    + (open ? '' : ' <span style="opacity:0.7;font-weight:400;">(+' + (g.cols.length - 1) + ')</span>')
                    + '</th>';
@@ -5744,30 +5748,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             const tip = CHIP_TIPS[label] ? ' data-tip="' + escAttr(CHIP_TIPS[label]) + '"' : '';
             return '<button type="button"' + tip + ' style="' + style + 'padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;" onclick="' + onclick + '">' + label + '</button>';
         }
-        // One floating box for every [data-tip] element; placed under the
-        // element and kept on screen.
-        (function() {
-            const box = document.createElement('div');
-            box.id = 'chipTip';
-            document.body.appendChild(box);
-            let cur = null;
-            document.addEventListener('mouseover', function(e) {
-                const el = e.target.closest ? e.target.closest('[data-tip]') : null;
-                if (el === cur) return;
-                cur = el;
-                if (!el) { box.style.display = 'none'; return; }
-                box.innerHTML = el.getAttribute('data-tip');
-                box.style.display = 'block';
-                const r = el.getBoundingClientRect();
-                const w = box.offsetWidth, h = box.offsetHeight;
-                let left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
-                let top = r.bottom + 8;
-                if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 8);
-                box.style.left = left + 'px';
-                box.style.top = top + 'px';
-            });
-            document.addEventListener('scroll', function() { box.style.display = 'none'; cur = null; }, true);
-        })();
+        // [data-tip] explanations are shown by Help mode (help script at the end of the page).
 
         function renderPlanner() {
             renderPlannerControls();
@@ -5938,7 +5919,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             for (const g of grps) {
                 const open = plannerColOpen[g.id];
                 h += '<th colspan="' + plannerVisCols(g).length + '" style="' + thGrp + 'background:' + grpBg[g.id] + ';cursor:pointer;"'
-                   + ' onclick="togglePlannerColGroup(\'' + g.id + '\')" title="' + (open ? 'Click to collapse' : 'Click to show all ' + g.cols.length + ' columns') + '">'
+                   + ' onclick="togglePlannerColGroup(\'' + g.id + '\')">'
                    + (open ? '&#x25BE; ' : '&#x25B8; ') + g.label
                    + (open || g.cols.length < 2 ? '' : ' <span style="opacity:0.7;font-weight:400;">(+' + (g.cols.length - 1) + ')</span>') + '</th>';
             }
@@ -6808,7 +6789,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             el.innerHTML = WS_TABS.map(t => {
                 const dis = t.key === 'predicted' && !wsContainerReady();
                 return '<button type="button" class="ws-tab' + (wsTab === t.key ? ' active' : '') + (dis ? ' disabled' : '') + '"'
-                    + (dis ? ' title="Open the Container Planner first (needs a vendor with cubage data)"' : '')
+                    + (dis ? ' data-help="&lt;strong&gt;Not available yet&lt;/strong&gt;Open the Container Planner with a vendor that has cubic-metre data first."' : '')
                     + (dis ? '' : ' onclick="wsSelectTab(\'' + t.key + '\')"') + '>' + t.label + '</button>';
             }).join('');
             const po = document.getElementById('wsExportPoBtn');
@@ -7254,5 +7235,348 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             // passphrase prompt never fires on plain page open.
         })();
     </script>
+<script>
+// ============================================================
+// Help mode (? button next to TAB VIEW). OFF by default: no hover
+// explanations at all. ON: hover anything — button, field, column
+// header, table cell, tile, tab, the item window — to see what it is.
+// Clicks keep working, so you can open an item and explore it too.
+// ============================================================
+(function () {
+    'use strict';
+    let helpOn = false;
+    const B = (title, body, note) => '<strong>' + title + '</strong>' + body + (note ? '<em>' + note + '</em>' : '');
+    const LOC_NAMES = { '10': 'Keilor Park', '20': 'Shepparton', '30': 'Dandenong South', '40': 'Tech Sales', '50': 'Off Site', 'IN': 'In-Transit', 'MAIN': 'Main Location' };
+    const months = () => (typeof plannerState !== 'undefined' && plannerState.months) || 6;
+
+    // ---- Columns (results table + planner + container + predicted + item window) ----
+    const COL = {
+        item_no: B('Item No.', 'The Wiise item code.', 'Click it to open the item window: monthly history, every forecast method, stock & orders and usage by branch.'),
+        description: B('Description', 'The item name from the Wiise item card.'),
+        status: B('Status', 'Quick health check from months of cover = (on hand + on PO − on SO) ÷ monthly average.', 'ORDER NOW = needs ordering, under 1 month · WATCH = 1–3 months · OK · OVER = above Max or 12+ months. The coloured stripe on the row matches.'),
+        usage: B('Usage', 'What has actually been used in the Date From → Date To range. Click the header to collapse/expand the group.'),
+        total_usage_12m: B('Total (months)', 'Units used in the date range: sales shipped (minus customer returns) plus parts consumed in assemblies. The number in brackets is how many months the range covers.'),
+        monthly_avg: B('Avg / Month', 'The monthly usage rate the forecast is built on.', 'Standard = Total ÷ months. The other methods give their own monthly figure (e.g. WMA leans on recent months).'),
+        forecast: B('Forecast', 'Expected usage over the coming months, using the selected Method and Increase %. Click the header to collapse/expand the group.'),
+        forecast_3m: B('Forecast 3M', 'Expected usage over the next 3 months (selected Method, plus any Increase %).'),
+        forecast_6m: B('Forecast 6M', 'Expected usage over the next 6 months (selected Method, plus any Increase %).'),
+        forecast_12m: B('Forecast 12M', 'Expected usage over the next 12 months (selected Method, plus any Increase %).'),
+        forecast_custom: B('Forecast (custom period)', 'Expected usage over the custom number of months typed in Forecast Period, plus any Increase %.'),
+        stock: B('Stock & Orders', 'What is on the shelf and what is already on order either way. Click the header to collapse/expand the group.'),
+        avail_inv: B('Inventory', 'Stock on hand from Wiise. With a Location selected, only those branches are counted.', 'With Stock gauge on, the bar shows stock against the Min → Max band.'),
+        sku_min: B('Min', 'Reorder point from the Wiise stockkeeping unit (per branch, added up for the branches shown). Order when stock drops below this.'),
+        sku_max: B('Max', 'Maximum inventory from the Wiise stockkeeping unit. Stock above this counts as overstocked.'),
+        qty_sales_order: B('On SO', 'Open sales-order quantity: promised to customers but not shipped yet. It is added to what you need.'),
+        qty_purch_order: B('On PO', 'Open purchase-order quantity: ordered from suppliers but not received yet. It is subtracted from what you need.'),
+        net: B('Net to Purchase', 'How much to buy so the forecast is covered. Click the header to collapse/expand the group.'),
+        net_3m: B('Net to Purchase 3M', 'Forecast 3M + On SO − Inventory − On PO, rounded up. 0 means stock and orders already cover it.'),
+        net_6m: B('Net to Purchase 6M', 'Forecast 6M + On SO − Inventory − On PO, rounded up. 0 means stock and orders already cover it.'),
+        net_12m: B('Net to Purchase 12M', 'Forecast 12M + On SO − Inventory − On PO, rounded up. 0 means stock and orders already cover it.'),
+        net_custom: B('Net to Purchase (custom period)', 'Custom-period forecast + On SO − Inventory − On PO, rounded up.'),
+        net_min: B('Order Qty (to Min)', 'How many to buy to bring stock back up to Min: Min − (on hand − on SO + on PO), rounded up to the order multiple.', 'Small grey “need” = the exact shortfall before rounding to the multiple.'),
+        // planner keys
+        itemNo: null, vendorNo: B('Vendor', 'The item’s current vendor from the Wiise item card.'),
+        availInv: B('On Hand', 'Stock on hand from Wiise (for the selected branches).'),
+        skuMin: null, skuMax: null, purchQty: null, salesQty: null, netMin: null,
+        skuMult: B('Multiple', 'Order multiple from the Wiise stockkeeping unit — order quantities are rounded up to this (e.g. sold in 54s).'),
+        net_order: B('Net to Order', 'Forecast + On SO − On Hand − On PO for the selected Forecast Period. Items already covered are hidden.'),
+        per: B('Order per Week / Month', 'Net to Order spread evenly over the Forecast Period — how much to bring in each week (or month) to keep up.'),
+        planner_forecast: B('Forecast', 'Expected usage over the selected Forecast Period, using the selected Method and Increase %.'),
+        // container
+        netQty: B('Net to Purchase (EACH)', 'What the vendor’s items need, in single units, from the forecast for the selected period plus any Increase %.'),
+        unit: B('Unit', 'The purchase unit from Wiise (e.g. BOX, PACK) the order is rounded to.'),
+        qtyPer: B('Qty per Unit', 'How many single units are in one purchase unit (e.g. 20 per BOX).'),
+        orderUnits: B('Order (Units)', 'Purchase units to order — editable. Optimize changes these to fill the container.'),
+        orderEach: B('Order (EACH)', 'Order (Units) × Qty per Unit — the single units you will receive.'),
+        cbmEach: B('CBM / Each', 'Cubic metres for one unit, from the Wiise item card (Unit Volume).'),
+        totalCbm: B('Total CBM', 'Order (EACH) × CBM/Each — the space this line takes in the container.'),
+        // predicted
+        originalQty: B('Original Qty', 'The order quantity before Optimize.'),
+        adjustedQty: B('Adjusted Qty', 'The order quantity after Optimize filled the container.'),
+        qtyDiff: B('Difference', 'Adjusted − Original.'),
+        pctChange: B('% Change', 'How much Optimize changed the quantity, as a percentage.'),
+        monthsCovered: B('Months Covered', 'How many months of demand the adjusted quantity covers at the current monthly rate.'),
+    };
+    COL.itemNo = COL.item_no; COL.skuMin = COL.sku_min; COL.skuMax = COL.sku_max;
+    COL.purchQty = COL.qty_purch_order; COL.salesQty = COL.qty_sales_order; COL.netMin = COL.net_min;
+    COL.desc = COL.description; COL.monthlyAvg = COL.monthly_avg;
+
+    // Header text → column (tables without sort keys, e.g. the item window)
+    const COL_TEXT = [
+        [/^item(\s*no\.?)?$/i, 'item_no'], [/^description$/i, 'description'], [/^status$/i, 'status'],
+        [/^total \(\d+m\)$/i, 'total_usage_12m'], [/^avg \/ month$|^monthly avg$/i, 'monthly_avg'],
+        [/^inventory$|^on hand$/i, 'avail_inv'], [/^min$/i, 'sku_min'], [/^max$/i, 'sku_max'],
+        [/^on so$/i, 'qty_sales_order'], [/^on po$/i, 'qty_purch_order'],
+        [/^net to purchase \(each\)$/i, 'netQty'], [/^unit$/i, 'unit'], [/^qty per unit$/i, 'qtyPer'],
+        [/^order \(units\)$/i, 'orderUnits'], [/^order \(each\)$/i, 'orderEach'], [/^cbm\/each$/i, 'cbmEach'], [/^total cbm$/i, 'totalCbm'],
+        [/^original qty$/i, 'originalQty'], [/^adjusted qty$/i, 'adjustedQty'], [/^difference$/i, 'qtyDiff'], [/^% change$/i, 'pctChange'], [/^months covered$/i, 'monthsCovered'],
+        [/^vendor$/i, 'vendorNo'], [/^multiple$/i, 'skuMult'], [/^net to order$/i, 'net_order'], [/^order qty$/i, 'net_min'],
+        [/^forecast (3|6|12)m$/i, m => 'forecast_' + m[1] + 'm'],
+    ];
+
+    // Item window + other plain-text labels, headings and tiles
+    const TEXT = [
+        [/^location$/i, B('Location', 'Branch code the usage came from.')],
+        [/^total used$/i, B('Total Used', 'Units used in the date range (sales minus returns, plus assembly consumption).')],
+        [/^% of total$/i, B('% of Total', 'This branch’s share of the item’s total usage.')],
+        [/^month$/i, B('Month', 'Calendar month of the usage.')],
+        [/^loc (.+)$/i, m => B('Loc ' + m[1], 'Usage at branch ' + m[1] + (LOC_NAMES[m[1].toUpperCase()] ? ' (' + LOC_NAMES[m[1].toUpperCase()] + ')' : '') + ' that month.')],
+        [/^total$/i, B('Total', 'All branches added together.')],
+        [/^custom forecast$/i, B('Custom Forecast', 'Try a different method, number of months or Increase % for THIS item only. It does not change the main table.')],
+        [/^inventory & orders$/i, B('Inventory & Orders', 'Stock on hand, open sales orders and open purchase orders for this item (selected branches).')],
+        [/^net to purchase \(forecast/i, B('Net to Purchase', 'Forecast + On SO − Inventory − On PO for 3, 6 and 12 months, rounded up.')],
+        [/^usage by location$/i, B('Usage by Location', 'Where this item was used, branch by branch, over the date range.')],
+        [/^monthly breakdown/i, B('Monthly Breakdown', 'Usage month by month and branch by branch — the raw numbers behind the averages, so you can check them against a Wiise export.')],
+        [/^item detail: (.+)$/i, m => B('Item window — ' + m[1], 'Everything about one item. Use the list on the left (or its search box) to jump to another item.')],
+        [/^qty on sales order$/i, COL.qty_sales_order], [/^qty on purch\. order$/i, COL.qty_purch_order], [/^inventory$/i, COL.avail_inv],
+        [/^net to purchase (3|6|12)m/i, m => COL['net_' + m[1] + 'm']],
+        [/^forecast (3|6|12)m/i, m => COL['forecast_' + m[1] + 'm']],
+        [/^monthly avg$/i, COL.monthly_avg],
+        [/^forecast months:?$/i, B('Forecast Months', 'Any number of months (decimals allowed) for this item’s custom forecast.')],
+        [/^increase %:?$/i, B('Increase %', 'Lifts the forecast by a percentage — e.g. +10% if you expect 10% more demand. Usage history is not changed.')],
+        // planner tiles
+        [/^items to order/i, B('Items to Order', 'How many items need buying for the selected Forecast Period after stock and open orders.')],
+        [/^net units over/i, B('Net Units', 'Total units to order across those items for the Forecast Period.')],
+        [/^units per (week|month)/i, B('Units per Week / Month', 'The net units spread evenly across the period — the steady rate to bring stock in.')],
+        // lanes
+        [/^order now/i, B('Order Now', 'Needs ordering and has less than about a month of cover (scales with the Forecast Period). Order these first.')],
+        [/^watch$/i, B('Watch', 'Needs ordering but still has some cover (roughly 1–3 months for 6M). Order soon.')],
+        [/^healthy/i, B('Healthy', 'Comfortable cover — nothing to do. Cards show months of cover.')],
+        [/^overstocked/i, B('Overstocked', 'Above the Wiise Max level, or 12+ months of cover (for 6M). Cards show stock on hand. Hold off ordering.')],
+        // container tiles
+        [/^total cbm$/i, B('Total CBM', 'Total cubic metres of everything in the plan.')],
+        [/^containers \((\d+) cbm\)$/i, m => B('Containers', 'How many ' + m[1] + ' CBM containers the plan needs (rounded up).')],
+        [/^remaining cbm$/i, B('Remaining CBM', 'Free space left in the last container.')],
+        [/^utilisation$/i, B('Utilisation', 'How full the containers are. Use Optimize to top them up.')],
+        [/items left out.*no cubage/i, B('Items left out', 'These items have no cubic metres (Unit Volume) on their Wiise item card, so they can’t be fitted into a container. They still need ordering — see the Order Planner. Add their Unit Volume in Wiise to include them.')],
+        [/^predicted forecast/i, B('Predicted Forecast', 'After Optimize: how many months each adjusted order quantity will last.')],
+    ];
+
+    // Actions: matched against onclick / onchange of the element (or an ancestor)
+    const ACTIONS = [
+        [/openThemePicker/, () => B('Theme', 'Change the colours and fonts of the tool. Saved on this computer.')],
+        [/toggleWorkspace/, () => B('Tab View', 'ON: filters across the top, each part of the tool on its own tab (Forecast Results, Container, Predicted, Order Planner, Priority Lanes). OFF: the original one long page.')],
+        [/toggleHelpMode/, () => B('Help (?)', 'Click to turn help on or off. While it is on, hover over anything to see what it means.')],
+        [/wsToggleTop/, () => B('Show / hide the top panel', 'Opens the Wiise login, Fast lookup, NAV and data options, plus import details. Click again to tuck it away.')],
+        [/connectToWiise/, () => B('Login & Load All Data', 'Signs in to Wiise and loads everything live: item ledger entries from 1 May 2026, items, vendors, branch stock, open orders, min/max levels and cubic metres. Takes a minute or two.')],
+        [/refreshFromWiise/, () => B('Refresh Data', 'Loads everything from Wiise again so the figures are up to the minute.')],
+        [/disconnectWiise/, () => B('Logout', 'Signs out of Wiise.')],
+        [/toggleManualUpload/, () => B('Manual upload', 'Load data from Excel exports instead of Wiise (ledger entries, item list, vendor list).')],
+        [/onNavToggle/, () => B('Include old NAV data', 'Adds the old NAV history (before Wiise went live on 30 April 2026) to the Wiise data, so averages use the longer history. Untick to use Wiise data only.')],
+        [/onSpecialToggle/, () => B('Include custom/special items', 'Shows made-to-order lines (TDQ…, TD+number, SM…, SP…, SPU/SPUQ…, 1000…). Hidden by default to keep the stock lines tidy.')],
+        [/showImportDetail\('(\w+)'/, m => B('Loaded data — ' + m[1], 'What was loaded and when. Click for the full breakdown.')],
+        [/removeImportBadge/, () => B('Remove', 'Clears this dataset from the tool (it does not touch Wiise).')],
+        [/applyDateRange/, () => B('Apply', 'Recalculates everything using only usage between Date From and Date To.')],
+        [/resetDateRange/, () => B('Reset dates', 'Puts the date range back to all the data loaded.')],
+        [/toggleLocation/, (m, el) => {
+            const c = (el.textContent || '').trim();
+            if (/^all$/i.test(c)) return B('All locations', 'Company-wide: every branch added together.');
+            const name = LOC_NAMES[c.toUpperCase()];
+            if (/^default$/i.test(c)) return B('Default', 'Lines with no branch recorded in the data. Tick together with other branches to include them.');
+            if (/^main$/i.test(c)) return B('Main', 'Wiise “Main Location”. Very few lines use it — mostly postings that should have gone to a real branch.');
+            return B('Branch ' + c + (name ? ' — ' + name : ''), 'Shows usage, stock, open orders and min/max for this branch only. Click several branches to add them together.');
+        }],
+        [/(?:wsSetMethod|setForecastMethod|setDetailForecastMethod|setContainerForecastMethod)\('(\w+)'\)/, m => {
+            const map = { standard: 'Standard', wma: 'WMA', linreg: 'Linear Regression', holt: 'Exp. Smoothing', seasonal: 'Seasonal' };
+            return (typeof CHIP_TIPS !== 'undefined' && CHIP_TIPS[map[m[1]]]) || null;
+        }],
+        [/wsChipToggle\('(\w+)'\)|toggleTableExtra\('(\w+)'\)|togglePlannerExtra\('(\w+)'\)|toggleReorderPolicy/, (m, el) => (typeof CHIP_TIPS !== 'undefined' && CHIP_TIPS[(el.textContent || '').trim()]) || null],
+        [/wsSetPlannerOpt\('months','(\d+)'\)/, m => B('Forecast Period — ' + m[1] + ' months', 'How far ahead to plan. Drives the Order Planner, Priority Lanes and Container Planner. On Forecast Results the 3M/6M/12M columns are always shown.')],
+        [/wsSetCustomMonths/, () => B('Custom Forecast Period', 'Type any number of months (e.g. 7.6). Forecast Results then shows one forecast column for that period, and the planners use it too.')],
+        [/wsSetPct|setContainerPct|onIncreaseChanged/, () => B('Increase %', 'Lifts every forecast by a percentage — e.g. +10% if you expect 10% more demand. Applies to Forecast Results, Order Planner, Priority Lanes, Container Planner and the exports. Usage history is not changed.')],
+        [/setDetailPct/, () => B('Increase % (this item)', 'Lifts this item’s custom forecast only.')],
+        [/wsSetPlannerOpt\('period','(\w+)'\)/, m => B('Period — ' + m[1], 'Order Planner only: show the order rate per week or per month.')],
+        [/wsSetPlannerOpt\('group','(\w+)'\)/, m => B('Group by — ' + m[1], 'Order Planner only: Vendor = one tile per vendor (click to open its list). Item = one long list of every item to order.')],
+        [/wsSelectTab\('results'\)/, () => B('Forecast Results', 'Every item with its usage, forecast, stock, open orders and how much to buy.')],
+        [/wsSelectTab\('container'\)/, () => B('Container Planner', 'Pick a vendor, then see how the order fits into 65 CBM shipping containers, using each item’s cubic metres.')],
+        [/wsSelectTab\('predicted'\)/, () => B('Predicted Forecast', 'After Optimize in the Container Planner: how many months each adjusted quantity will last.')],
+        [/wsSelectTab\('planner'\)/, () => B('Order Planner', 'What to order, from whom and how fast — net of stock and open orders, per week or per month.')],
+        [/wsSelectTab\('lanes'\)/, () => B('Priority Lanes', 'Every item sorted into Order Now / Watch / Healthy / Overstocked so the urgent ones stand out.')],
+        [/wsExportCSV|exportCSV|plannerExportCSV|lanesExportCSV/, () => B('Export', 'Downloads what you are looking at on this tab, with the current filters, method, period and Increase %.')],
+        [/exportContainerPO/, () => B('Export to Excel for PO', 'Downloads the container plan laid out for raising a purchase order. Open the Container Planner with a vendor first.')],
+        [/exportContainerExcel/, () => B('Export to Excel', 'Downloads the container plan with CBM totals.')],
+        [/fillContainer/, () => B('Optimize', 'Tops the order up to fill the last container (first click), then adds one more container per click — shared across items in proportion to their demand, rounded to whole boxes.')],
+        [/resetContainerPlan/, () => B('Reset', 'Puts the container quantities back to the plain forecast and clears the Increase %.')],
+        [/showItemDetail\('([^']*)'/, m => B('Item ' + m[1], 'Click to open the item window: monthly history, every forecast method, stock & orders and usage by branch.')],
+        [/openPlannerVendor\('([^']*)'/, m => B('Vendor ' + m[1], 'Number of items to order and the weekly (or monthly) rate. Click to see this vendor’s full ordering list.')],
+        [/wsPlannerVendorBack/, () => B('All vendors', 'Back to the vendor tiles.')],
+        [/toggleLaneVendor\('(\w+)/, () => B('Vendor group', 'Items from this vendor in this lane. Click to show or hide them.')],
+        [/handleSort\('(\w+)'\)|plannerSortBy\('(\w+)'\)|handleContainerSort\('(\w+)'\)|handlePfSort\('(\w+)'\)/, (m, el) => colHelp(m[1] || m[2] || m[3] || m[4], el)],
+        [/toggleColGroup\('(\w+)'\)|togglePlannerColGroup\('(\w+)'\)/, (m) => COL[m[1] || m[2]] || null],
+        [/goPage/, () => B('Pages', 'Move between pages of the table. Change how many rows show per page with Show.')],
+        [/openAdvModal/, () => B('Advanced Forecast Methods', 'Opens every forecast method side by side for this item, so you can see which fits its history best.')],
+        [/toggleDetailMax/, () => B('Full screen', 'Makes the item window fill the screen. Click again to restore.')],
+        [/clearVendor/, () => B('Clear vendor', 'Removes the vendor filter (all vendors). Deleting the text does the same.')],
+        [/closeDetail|closeAdvModal|closeWsMsg/, () => B('Close', 'Closes this window.')],
+    ];
+
+    // Fields by id
+    const IDS = {
+        dateFrom: B('Date From', 'Start of the usage history used for averages and forecasts. Press Apply after changing it.'),
+        dateTo: B('Date To', 'End of the usage history used for averages and forecasts. Press Apply after changing it.'),
+        searchInput: B('Search', 'Type part of an item code or description. A list of every match appears — ↑↓ to move, Enter or click to pick one item. Filters every tab.'),
+        vendorSearchInput: B('Vendor', 'Pick one vendor to see only their items (and to use the Container Planner). Delete the text to show all vendors again.'),
+        pageSize: B('Show', 'How many rows per page on Forecast Results, and how many cards per lane on Priority Lanes.'),
+        fastLookupBtn: B('Fast lookup', 'Opens a ready-made snapshot of Wiise data captured automatically three times a day (morning, midday, evening) — loads in seconds instead of a full login. The menu shows when each was captured.'),
+        detailListSearch: B('Search items', 'Find another item to open in this window.'),
+        detailCustomMonths: B('Forecast Months', 'Any number of months (decimals allowed) for this item’s custom forecast.'),
+        detailPctInput: B('Increase %', 'Lifts this item’s custom forecast only.'),
+        wsToggleWrap: null, helpBtn: null,
+    };
+    // Labels in the filter bar
+    const LABELS = [
+        [/^date from/i, IDS.dateFrom], [/^date to/i, IDS.dateTo],
+        [/^location:?$/i, B('Location', 'Pick branches to see their usage, stock, orders and min/max only. All = company-wide.')],
+        [/^method:?$/i, B('Method', 'How the forecast is worked out from the usage history. Hover each method for details.')],
+        [/^forecast period:?$/i, B('Forecast Period', 'How many months ahead to plan for (3, 6, 12 or type your own). Increase % sits next to it.')],
+        [/^period:?$/i, B('Period', 'Order Planner only: show the order rate per week or per month.')],
+        [/^group by:?$/i, B('Group by', 'Order Planner only: one tile per vendor, or one list of items.')],
+        [/^show:?$/i, IDS.pageSize], [/^search:?$/i, IDS.searchInput], [/^vendor:?$/i, IDS.vendorSearchInput],
+    ];
+
+    // Areas (fallback when nothing more specific is under the mouse)
+    const AREAS = [
+        ['#itemSuggest', B('Search matches', 'Every item matching what you typed. ↑↓ to move, Enter or click to pick.')],
+        ['#detailModal', B('Item window', 'Everything about one item: history, forecasts, stock and orders. Hover any number or heading for details.')],
+        ['#advModal', B('Advanced Forecast Methods', 'Every forecast method side by side for this item.')],
+        ['#plannerContent', B('Order Planner', 'Items or vendors that need ordering for the Forecast Period, after stock and open orders.')],
+        ['#containerContent', B('Container plan', 'This vendor’s order, line by line, with cubic metres per line.')],
+        ['#wsPredictedHost', COL.monthsCovered],
+        ['#tableScroll', B('Forecast Results', 'One row per item. Hover a column header or any number to see what it means.')],
+    ];
+
+    function colHelp(key, el) {
+        if (key === 'forecast' && el && el.closest && el.closest('#plannerContent, #plannerVendorModal')) return COL.planner_forecast;
+        if (key === 'net' && el && el.closest && el.closest('#plannerContent, #plannerVendorModal')) return COL.net_order;
+        return COL[key] || null;
+    }
+    function colFromText(t) {
+        for (const [re, k] of COL_TEXT) {
+            const m = t.match(re);
+            if (m) return typeof k === 'function' ? COL[k(m)] : COL[k];
+        }
+        return null;
+    }
+    function textHelp(t) {
+        for (const [re, h] of TEXT) {
+            const m = t.match(re);
+            if (m) return typeof h === 'function' ? h(m) : h;
+        }
+        return null;
+    }
+    // A table cell → explanation of its column (header found by horizontal position)
+    function cellHelp(td) {
+        const table = td.closest('table');
+        if (!table) return null;
+        const r = td.getBoundingClientRect();
+        const x = r.left + r.width / 2;
+        let best = null;
+        table.querySelectorAll('th').forEach(th => {
+            if (th.colSpan > 1) return;
+            const b = th.getBoundingClientRect();
+            if (x >= b.left && x < b.right) best = th;
+        });
+        if (!best) return null;
+        const h = thHelp(best);
+        return h;
+    }
+    function thHelp(th) {
+        const oc = th.getAttribute('onclick') || '';
+        for (const [re, fn] of ACTIONS) {
+            const m = oc.match(re);
+            if (m) { const h = fn(m, th); if (h) return h; }
+        }
+        return colFromText((th.textContent || '').replace(/[▾▸▴↑↓▲▼]/g, '').replace(/\s+/g, ' ').trim());
+    }
+    function ownText(el) {
+        return (el.textContent || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function helpFor(target) {
+        let el = target;
+        for (let depth = 0; el && el !== document.body && depth < 9; depth++, el = el.parentElement) {
+            if (el.id === 'chipTip') return null;
+            if (el.dataset && el.dataset.help) return el.dataset.help;
+            if (el.dataset && el.dataset.tip) return el.dataset.tip;
+            if (el.id && IDS[el.id]) return IDS[el.id];
+            if (el.id === 'wsToggleWrap') return ACTIONS[1][1]();
+            if (el.id === 'helpBtn') return ACTIONS[2][1]();
+            const tag = el.tagName;
+            if (tag === 'TH') { const h = thHelp(el); if (h) return h; }
+            if (tag === 'TD') { const h = cellHelp(el); if (h) return h; }
+            const oc = (el.getAttribute && (el.getAttribute('onclick') || el.getAttribute('onchange') || el.getAttribute('oninput'))) || '';
+            if (oc) {
+                for (const [re, fn] of ACTIONS) {
+                    const m = oc.match(re);
+                    if (m) { const h = fn(m, el); if (h) return h; }
+                }
+            }
+            if (tag === 'INPUT' && el.type === 'checkbox' && el.parentElement) continue;
+            const t = ownText(el);
+            if (t && t.length > 70 && t.length <= 600 && !el.querySelector('button, input, select, table')) {
+                const h = textHelp(t.slice(0, 70));   // e.g. the "items left out" warning with its item list
+                if (h) return h;
+            }
+            if (t && t.length <= 70 && !el.querySelector('button, input, select, table')) {
+                if (tag === 'LABEL' || /^(DIV|SPAN)$/.test(tag)) {
+                    for (const [re, h] of LABELS) if (re.test(t)) return h;
+                }
+                // Summary tiles: "57 Items to Order", "4,974Total Used" — the number
+                // gets its tile's explanation (a bare number walks up to its tile)
+                const label = t.replace(/^[\d,.%∞\s−-]+(mo\b)?\s*/, '');
+                const h = textHelp(t) || (label && label !== t ? textHelp(label) : null);
+                if (h) return h;
+            }
+        }
+        for (const [sel, h] of AREAS) if (target.closest && target.closest(sel)) return h;
+        return null;
+    }
+
+    // ---- Floating box (shared with the chip tips) ----
+    let box = document.getElementById('chipTip');
+    if (!box) { box = document.createElement('div'); box.id = 'chipTip'; document.body.appendChild(box); }
+    let lastTarget = null, lastHtml = null, mx = 0, my = 0, raf = 0;
+    function place() {
+        raf = 0;
+        if (box.style.display !== 'block') return;
+        const w = box.offsetWidth, h = box.offsetHeight;
+        let left = mx + 16, top = my + 18;
+        if (left + w > window.innerWidth - 8) left = Math.max(8, mx - w - 12);
+        if (top + h > window.innerHeight - 8) top = Math.max(8, my - h - 12);
+        box.style.left = left + 'px';
+        box.style.top = top + 'px';
+    }
+    function hide() { box.style.display = 'none'; lastTarget = null; lastHtml = null; }
+    document.addEventListener('mousemove', function (e) {
+        if (!helpOn) return;
+        mx = e.clientX; my = e.clientY;
+        if (e.target !== lastTarget) {
+            lastTarget = e.target;
+            const h = helpFor(e.target);
+            if (!h) { box.style.display = 'none'; lastHtml = null; }
+            else if (h !== lastHtml) { box.innerHTML = h; lastHtml = h; box.style.display = 'block'; }
+            else box.style.display = 'block';
+        }
+        if (!raf) raf = requestAnimationFrame(place);
+    }, true);
+    document.addEventListener('mouseleave', hide);
+    window.addEventListener('blur', hide);
+
+    window.toggleHelpMode = function () {
+        helpOn = !helpOn;
+        document.body.classList.toggle('help-mode', helpOn);
+        const b = document.getElementById('helpBtn');
+        if (b) b.classList.toggle('on', helpOn);
+        if (!helpOn) hide();
+        else {
+            const r = b ? b.getBoundingClientRect() : null;
+            if (r) { mx = r.left; my = r.bottom; }
+            box.innerHTML = B('Help is on', 'Hover over anything — buttons, fields, column headers, numbers, tabs, the item window — to see what it means. Click ? again to turn help off.'); box.style.display = 'block'; lastHtml = null; lastTarget = null; place();
+        }
+    };
+    window.isHelpMode = () => helpOn;
+})();
+
+</script>
 </body>
 </html>
