@@ -264,11 +264,11 @@
         #chipTip em { display: block; margin-top: 6px; opacity: 0.8; }
         /* Item search suggestions — reuses the vendor dropdown look (and its themes) */
         .item-search-wrap { min-width: 180px; }
-        #itemSuggest { max-height: 340px; min-width: 420px; }
-        #itemSuggest .is-count { padding: 6px 12px; font-size: 11px; color: #888; border-bottom: 1px solid #eee; position: sticky; top: 0; background: inherit; }
-        #itemSuggest .vendor-option { display: flex; gap: 10px; align-items: baseline; }
-        #itemSuggest .is-code { font-weight: 700; white-space: nowrap; }
-        #itemSuggest .is-desc { opacity: 0.75; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+        #itemSuggest { max-height: none; overflow: hidden; min-width: 420px; }
+        #itemSuggest.open { display: flex; flex-direction: column; }
+        #itemSuggest .is-count { flex: none; padding: 6px 12px; font-size: 11px; opacity: 0.7; border-bottom: 1px solid rgba(128,128,128,0.25); }
+        #itemSuggestList { overflow-y: auto; max-height: 300px; }
+        #itemSuggest .vendor-option { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         #itemSuggest .is-hit { background: rgba(255, 213, 79, 0.55); color: inherit; border-radius: 2px; }
         #itemSuggest .vendor-option.active { background: #c5cae9; color: inherit; }
         .vendor-status {
@@ -3150,10 +3150,11 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             itemSuggestShown = 0;
             const n = itemSuggestList.length;
             dd.innerHTML = '<div class="is-count">' + (n ? n.toLocaleString() + ' item' + (n === 1 ? '' : 's') + ' match \u2014 \u2191\u2193 to move, Enter to pick, Esc to close'
-                : 'No items match') + '</div>';
-            dd.onscroll = function() { if (dd.scrollTop + dd.clientHeight >= dd.scrollHeight - 40) appendItemSuggest(); };
+                : 'No items match') + '</div><div id="itemSuggestList"></div>';
+            const list = document.getElementById('itemSuggestList');
+            list.onscroll = function() { if (list.scrollTop + list.clientHeight >= list.scrollHeight - 40) appendItemSuggest(); };
             appendItemSuggest();
-            dd.scrollTop = 0;
+            list.scrollTop = 0;
             dd.classList.add('open');
         }
         function itemSuggestHi(text, q) {
@@ -3163,15 +3164,14 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         }
         function appendItemSuggest() {
             if (itemSuggestShown >= itemSuggestList.length) return;
-            const dd = document.getElementById('itemSuggest');
+            const dd = document.getElementById('itemSuggestList');
             const q = document.getElementById('searchInput').value.toLowerCase().trim();
             const end = Math.min(itemSuggestList.length, itemSuggestShown + ITEM_SUGGEST_CHUNK);
             let html = '';
             for (let i = itemSuggestShown; i < end; i++) {
                 const it = itemSuggestByNo[itemSuggestList[i]];
                 html += '<div class="vendor-option" data-i="' + i + '" onmousedown="pickItemSuggest(itemSuggestList[' + i + '])">'
-                    + '<span class="is-code">' + itemSuggestHi(it.item_no, q) + '</span>'
-                    + '<span class="is-desc">' + itemSuggestHi(it.description, q) + '</span></div>';
+                    + itemSuggestHi(it.item_no, q) + (it.description ? ' - ' + itemSuggestHi(it.description, q) : '') + '</div>';
             }
             dd.insertAdjacentHTML('beforeend', html);
             itemSuggestShown = end;
@@ -3180,16 +3180,14 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             if (!itemSuggestList.length) return;
             itemSuggestIdx = Math.max(0, Math.min(itemSuggestList.length - 1, itemSuggestIdx + step));
             while (itemSuggestIdx >= itemSuggestShown) appendItemSuggest();
-            const dd = document.getElementById('itemSuggest');
+            const dd = document.getElementById('itemSuggestList');
             dd.querySelectorAll('.vendor-option.active').forEach(el => el.classList.remove('active'));
             const el = dd.querySelector('.vendor-option[data-i="' + itemSuggestIdx + '"]');
             if (el) {
                 el.classList.add('active');
-                // keep the highlighted row clear of the sticky count line
-                const head = dd.querySelector('.is-count');
-                const top = el.offsetTop - (head ? head.offsetHeight : 0);
+                const top = el.offsetTop - dd.offsetTop;
                 if (top < dd.scrollTop) dd.scrollTop = top;
-                else if (el.offsetTop + el.offsetHeight > dd.scrollTop + dd.clientHeight) dd.scrollTop = el.offsetTop + el.offsetHeight - dd.clientHeight;
+                else if (top + el.offsetHeight > dd.scrollTop + dd.clientHeight) dd.scrollTop = top + el.offsetHeight - dd.clientHeight;
             }
         }
         function pickItemSuggest(itemNo) {
