@@ -5519,13 +5519,15 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             return plannerAllRows().filter(r => r.net > 0);
         }
 
-        // Search scope follows the grouping: Vendor view searches vendors
-        // only; Item view searches item no. / description only.
+        // Classic pop-up: search scope follows the grouping (Vendor view searches
+        // vendor names, Item view item no. / description). Tab view: the shared
+        // search bar always means items, like Forecast Results — vendor names
+        // have their own Vendor filter there.
         function plannerFilteredRows() {
             const s = plannerState, q = s.search;
             let rows = computePlannerRows();
             if (!q) return rows;
-            if (s.group === 'vendor') {
+            if (s.group === 'vendor' && !wsMode) {
                 return rows.filter(r => plannerVendorLabelOf(r).indexOf(q) !== -1);
             }
             return rows.filter(r =>
@@ -5803,7 +5805,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             // Tab view vendor drill-down: this vendor's schedule inline, with a way back
             if (wsMode && wsPlannerVendor) {
                 const v = wsPlannerVendor;
-                const vRows = plannerSortRows(computePlannerRows().filter(r => (r.vendorNo || '__none__') === v));
+                const vRows = plannerSortRows(plannerFilteredRows().filter(r => (r.vendorNo || '__none__') === v));
                 const perK = plannerPerKey();
                 const label = v === '__none__' ? 'No vendor assigned' : vendorDisplayLabel(v);
                 let sm = '<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:12px;font-size:12px;">'
@@ -6647,8 +6649,9 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         function wsSyncPlanner() {
             plannerState.locations = selectedLocations.slice();
             if (PLANNER_METHODS.some(m => m.key === selectedForecastMethod)) plannerState.method = selectedForecastMethod;
+            // Normalised exactly like applyFilters(): planner rows compare lower-case
             const si = document.getElementById('searchInput');
-            plannerState.search = si ? si.value : '';
+            plannerState.search = si ? si.value.toLowerCase().trim() : '';
         }
         function wsSetMethod(k) {
             plannerState.method = k;
