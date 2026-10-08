@@ -254,6 +254,14 @@
             cursor: pointer; color: #999; font-size: 16px; line-height: 1;
         }
         .vendor-clear:hover { color: #333; }
+        /* Hover explanations for filter chips (one floating box, follows the theme font) */
+        #chipTip {
+            position: fixed; z-index: 20000; max-width: 340px; padding: 10px 12px;
+            background: #1f2333; color: #f3f4f8; border-radius: 8px; font-size: 12px; line-height: 1.45;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.25); pointer-events: none; display: none;
+        }
+        #chipTip strong { display: block; margin-bottom: 4px; font-size: 12.5px; }
+        #chipTip em { display: block; margin-top: 6px; opacity: 0.8; }
         /* Item search suggestions — reuses the vendor dropdown look (and its themes) */
         .item-search-wrap { min-width: 180px; }
         #itemSuggest { max-height: 340px; min-width: 420px; }
@@ -3813,8 +3821,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 extrasChips.innerHTML = wsMode ? '' : plannerChip(!!tableExtras.minorder, "toggleTableExtra('minorder')", 'Order to Min')
                     + '<span style="display:inline-block;width:18px;"></span>'
                     + plannerChip(!!tableExtras.roundup, "toggleTableExtra('roundup')", 'Round up') + ' '
-                    + '<span title="Reordering Policy = Order items are back-to-back specials we never stock. ON: hidden unless they have open sales-order quantity. OFF: all shown.">'
-                    + plannerChip(hideReorderPolicyItems, 'toggleReorderPolicy()', 'Reorder policy') + '</span> '
+                    + plannerChip(hideReorderPolicyItems, 'toggleReorderPolicy()', 'Reorder policy') + ' '
                     + plannerChip(!!tableExtras.gauge, "toggleTableExtra('gauge')", 'Stock gauge') + ' '
                     + plannerChip(!!tableExtras.status, "toggleTableExtra('status')", 'Status');
             }
@@ -5719,12 +5726,50 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             return rows;
         }
 
+        // Hover explanations, keyed by chip label (methods + display options).
+        const CHIP_TIPS = {
+            'Standard': '<strong>Standard — simple average</strong>Total usage in the date range ÷ number of months, then × the forecast period. Steady and predictable; the best default for regular sellers.<em>e.g. 1,200 sold over 12 months = 100/month → 6M forecast 600.</em>',
+            'WMA': '<strong>WMA — weighted moving average</strong>Uses the last 6 complete months only. The newest month counts 6×, the oldest 1×, so it reacts faster when demand has recently risen or dropped.<em>e.g. last three months 80, 100, 120 → about 107/month instead of 100. Skips the current, unfinished month.</em>',
+            'Linear Regression': '<strong>Linear Regression — trend line</strong>Draws a straight line through every complete month and carries it forward. Use for items clearly growing or shrinking; one unusual month can tilt the line.<em>e.g. sales climbing 50 → 150 over a year keeps climbing in the forecast. Skips the current, unfinished month.</em>',
+            'Exp. Smoothing': '<strong>Exp. Smoothing — Holt\'s method</strong>Follows the current level and trend, leaning on recent months but smoothing out spikes. A middle ground: reacts faster than Linear Regression without jumping on one big month.<em>e.g. demand jumps 80 → 120: the forecast moves up to about 108, not straight to 120. Skips the current, unfinished month.</em>',
+            'Seasonal': '<strong>Seasonal — monthly pattern + trend</strong>Learns each calendar month\'s usual share of sales (e.g. heating parts peak in winter), finds the underlying trend, then forecasts month by month with that pattern added back. Needs 6+ complete months; best with 12+.<em>e.g. baseline 100/month with a winter index of 1.8 → 180 forecast for that month.</em>',
+            'Order to Min': '<strong>Order to Min</strong>Adds an Order Qty column: how many to buy to bring stock back up to the Min level set in Wiise — Min − (on hand − on sales orders + on purchase orders), rounded up to the order multiple. Items with no Min show “-”.',
+            'Round up': '<strong>Round up</strong>Shows usage and forecast quantities as whole units, always rounded up (10.2 → 11), instead of one decimal place.',
+            'Reorder policy': '<strong>Reorder policy</strong>Items with Reordering Policy = Order in Wiise are back-to-back specials we never stock.<em>ON: hidden unless they have open sales-order quantity. OFF: all shown.</em>',
+            'Stock gauge': '<strong>Stock gauge</strong>Adds a small bar to the Inventory column: the shaded band is Min → Max from Wiise, the marker is stock on hand. Red = below Min, purple = above Max. Only for items with a Max set.',
+            'Status': '<strong>Status</strong>Adds a status tag and a coloured stripe on each row, based on months of cover = (on hand + on PO − on SO) ÷ monthly average.<em>For a 6M period: ORDER NOW = needs ordering and under 1 month · WATCH = 1–3 months · OK · OVER = above Max or 12+ months.</em>',
+        };
         function plannerChip(active, onclick, label) {
             const style = active
                 ? 'background:#1a237e;color:white;border:1px solid #1a237e;'
                 : 'background:white;color:#444;border:1px solid #ccc;';
-            return '<button type="button" style="' + style + 'padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;" onclick="' + onclick + '">' + label + '</button>';
+            const tip = CHIP_TIPS[label] ? ' data-tip="' + escAttr(CHIP_TIPS[label]) + '"' : '';
+            return '<button type="button"' + tip + ' style="' + style + 'padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;" onclick="' + onclick + '">' + label + '</button>';
         }
+        // One floating box for every [data-tip] element; placed under the
+        // element and kept on screen.
+        (function() {
+            const box = document.createElement('div');
+            box.id = 'chipTip';
+            document.body.appendChild(box);
+            let cur = null;
+            document.addEventListener('mouseover', function(e) {
+                const el = e.target.closest ? e.target.closest('[data-tip]') : null;
+                if (el === cur) return;
+                cur = el;
+                if (!el) { box.style.display = 'none'; return; }
+                box.innerHTML = el.getAttribute('data-tip');
+                box.style.display = 'block';
+                const r = el.getBoundingClientRect();
+                const w = box.offsetWidth, h = box.offsetHeight;
+                let left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
+                let top = r.bottom + 8;
+                if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 8);
+                box.style.left = left + 'px';
+                box.style.top = top + 'px';
+            });
+            document.addEventListener('scroll', function() { box.style.display = 'none'; cur = null; }, true);
+        })();
 
         function renderPlanner() {
             renderPlannerControls();
