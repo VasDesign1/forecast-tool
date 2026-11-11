@@ -6,7 +6,8 @@
     <title>Item Demand Forecast Tool (Wiise Connected)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
-    <script src="bc-fetchers.js?v=8"></script>
+    <script src="bc-fetchers.js?v=9"></script>
+    <script src="procure.js?v=1"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;900&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
@@ -1404,6 +1405,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         <!-- Tab view hosts -->
         <div id="wsPlannerHost" style="display:none;"></div>
         <div id="wsPredictedHost" style="display:none;"></div>
+        <div id="wsProcureHost" style="display:none;"></div>
         <div id="wsContainerHint" class="table-container" style="display:none;padding:34px;text-align:center;color:#888;">
             <h3 style="color:#1a237e;margin-bottom:8px;">Container Planner</h3>
             <p style="font-size:13px;">Pick a vendor in the <strong>Vendor</strong> filter above to build a container plan (needs items with cubage data).</p>
@@ -1782,6 +1784,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             processOrderWithMapping(items, { itemNo: 'No.', salesQty: 'Qty on Sales Order', purchQty: 'Qty on Purch. Order', availInv: 'Inventory', desc: 'Description' });
             vendorMapping = {};
             processVendorWithMapping(vendRows, { itemNo: 'No.', vendorNo: 'Vendor No.', vendorName: 'Vendor Name' });
+            if (typeof PROC !== 'undefined') PROC.loadDemo();
             updateBCStatus('DEMO DATA — localhost preview only, nothing here is real');
         }
 
@@ -1858,6 +1861,12 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 var uom = await bcFetchItemUom();
                 console.log("Cubage:", uom.diagnostics);
                 updateBCProgressPercent(90);
+                // Step 4d: Purchasing data for the procurement tabs (only for the
+                // accounts that see them; a failure never stops the load).
+                if (typeof PROC !== "undefined" && PROC.enabled()) {
+                    updateBCProgress("Purchasing", "Starting...");
+                    await PROC.liveLoad();
+                }
 
                 // Step 5: Feed into existing processing functions
                 updateBCStatus("Processing data...");
@@ -6860,15 +6869,20 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             wsRenderTabs();
             wsApplyTabView();
         }
+        // Forecast tabs, plus the procurement tabs (procure.js) for the accounts allowed to see them
+        function wsProcTab() { return typeof PROC !== 'undefined' && PROC.isTab(wsTab) && PROC.enabled(); }
+        function wsAllTabs() { return typeof PROC !== 'undefined' ? WS_TABS.concat(PROC.tabs()) : WS_TABS; }
         function wsRenderTabs() {
             const el = document.getElementById('wsTabBtns');
             const strip = document.getElementById('wsTabs');
             if (!el || !strip) return;
             strip.style.display = (wsMode && allData.length > 0) ? 'flex' : 'none';
             if (!wsMode) return;
-            el.innerHTML = WS_TABS.map(t => {
+            el.innerHTML = wsAllTabs().map(t => {
                 const dis = t.key === 'predicted' && !wsContainerReady();
-                return '<button type="button" class="ws-tab' + (wsTab === t.key ? ' active' : '') + (dis ? ' disabled' : '') + '"'
+                // A thin divider sets the procurement tabs apart from the forecast tabs
+                const sep = t.key === 'p_po' ? '<span style="width:1px;align-self:stretch;background:#c5cae9;margin:0 4px;"></span>' : '';
+                return sep + '<button type="button" class="ws-tab' + (wsTab === t.key ? ' active' : '') + (dis ? ' disabled' : '') + '"'
                     + (dis ? ' data-help="&lt;strong&gt;Not available yet&lt;/strong&gt;Open the Container Planner with a vendor that has cubic-metre data first."' : '')
                     + (dis ? '' : ' onclick="wsSelectTab(\'' + t.key + '\')"') + '>' + t.label + '</button>';
             }).join('');
@@ -6880,7 +6894,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             }
             const cb = document.getElementById('wsExportCsvBtn');
             if (cb) {
-                const cur = WS_TABS.find(x => x.key === wsTab);
+                const cur = wsAllTabs().find(x => x.key === wsTab);
                 cb.textContent = (wsTab === 'container' || wsTab === 'predicted') ? 'Export to Excel' : 'Export CSV';
                 cb.title = 'Exports the ' + (cur ? cur.label : '') + ' tab';
             }
@@ -6891,13 +6905,18 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
             const hint = document.getElementById('wsContainerHint');
             const ph = document.getElementById('wsPlannerHost');
             const pph = document.getElementById('wsPredictedHost');
+            const prh = document.getElementById('wsProcureHost');
             if (!wsMode) {
                 if (tc) tc.style.display = '';
                 if (hint) hint.style.display = 'none';
                 if (ph) ph.style.display = 'none';
                 if (pph) pph.style.display = 'none';
+                if (prh) prh.style.display = 'none';
                 return;   // containerSection keeps renderContainerPlanning's decision
             }
+            // Procurement tabs: every filter change lands here, so they redraw with it
+            if (prh) prh.style.display = wsProcTab() ? 'block' : 'none';
+            if (wsProcTab()) PROC.render();
             const ready = wsContainerReady();
             if (tc) tc.style.display = (wsTab === 'results') ? '' : 'none';
             if (cs) cs.style.display = (wsTab === 'container' && ready) ? 'block' : 'none';
@@ -6930,6 +6949,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 if (wsTab === 'predicted') wsSelectTab('container');   // needs re-optimizing
             }
             if (key === 'months' && wsMode && wsTab === 'results') renderTable();
+            if (wsMode && wsProcTab()) PROC.render();
             wsRenderFilterChips();
         }
         function wsSetCustomMonths(v) {
@@ -7013,6 +7033,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 ;
         }
         function wsExportCSV() {
+            if (wsProcTab()) return PROC.exportCSV();
             if (wsTab === 'planner') return plannerExportCSV();
             if (wsTab === 'lanes') return lanesExportCSV();
             if (wsTab === 'container' || wsTab === 'predicted') return exportContainerExcel();
@@ -7425,6 +7446,9 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
                 { label: "Captured",        value: asOf + " (Melbourne)",                  color: "#555"    },
                 { label: "Ledger window",   value: fmtDMY(payload.meta.from) + " → " + fmtDMY(payload.meta.to), color: "#555" },
             ]);
+            // Procurement tabs: their purchasing file loads in the background
+            // (only for the accounts that see those tabs; never blocks or fails the snapshot).
+            if (typeof PROC !== "undefined") PROC.afterSnapshot();
         }
 
         // ---- Wire up the Fast lookup dropdown + restore the NAV tick box ----
@@ -7654,6 +7678,7 @@ html.theme-atelier [style*="background:#e8eaf6"], html.theme-atelier [style*="ba
         ['#plannerContent', B('Order Planner', 'Items or vendors that need ordering for the Forecast Period, after stock and open orders.')],
         ['#containerContent', B('Container plan', 'This vendor’s order, line by line, with cubic metres per line.')],
         ['#wsPredictedHost', COL.monthsCovered],
+        ['#wsProcureHost', B('Procurement', 'Purchasing views built from open orders, receipts and stock in Wiise. Hover a column heading or a tile to see what it means.')],
         ['#tableScroll', B('Forecast Results', 'One row per item. Hover a column header or any number to see what it means.')],
     ];
 

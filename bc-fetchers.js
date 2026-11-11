@@ -721,12 +721,176 @@ async function bcFetchItemUom() {
     return { map: map, diagnostics: Object.keys(map).length + " items with cubage (" + notes.join("; ") + ")" };
 }
 
+// 6) Purchasing data for the procurement tabs (Purchase Orders, Buy List,
+//    Back Orders, Stock Runway, Branch Transfers, Vendors, ...).
+//    Every part fails on its own: a null part means "that tab shows what it
+//    can" and diagnostics says why. Rows are compact arrays to keep the
+//    snapshot small:
+//      po   [docNo, vendorNo, item, loc, qtyBase, outstandingBase, receivedBase, unitCostLcyPerBase, expectedDate, description, outstandingValueLcy]
+//      poHead { docNo: { od: orderDate, vn: vendorName, st: status, cur: currency } }
+//      so   [docNo, customerNo, item, loc, outstandingBase, shipmentDate]
+//      soHead { docNo: customerName }
+//      rc   [postingDate, vendorNo, orderNo, documentDate, item, qty, expectedDate]   (posted receipt lines)
+//      inv  [postingDate, vendorNo, item, invoicedQty, costAmountLcy]                 (invoiced purchase cost)
+//      cost { item: unitCost }
+//      tr   [docNo, fromLoc, toLoc, item, qtyStillToReceive, receiptDate]             (open transfer orders)
+//      transit [in-transit location codes]
+//      vn   { vendorNo: name }
+async function bcFetchProcurement() {
+    const out = { v: 1, po: null, poHead: null, so: null, soHead: null, rc: null, inv: null, cost: null,
+                  tr: null, transit: [], vn: {}, diagnostics: {} };
+    const coName = encodeURIComponent(BC_CONFIG.companyName);
+    const odata = BC_ODATA_URL + "/Company('" + coName + "')/";
+    const num = v => parseFloat(v) || 0;
+    const day = v => { const s = String(v || "").slice(0, 10); return (/^\d{4}-\d{2}-\d{2}$/.test(s) && s > "1900") ? s : ""; };
+    const str = v => String(v == null ? "" : v).trim();
+    let names = [];
+    try { names = await bcListODataEntities(); } catch (e) { out.diagnostics.pages = "page list unavailable — " + e.message; }
+    let api = "";
+    try { api = BC_API_URL + "/companies(" + (await bcGetCompanyId()) + ")/"; } catch (e) { out.diagnostics.api = e.message; }
+
+    // Open document lines (purchase or sales orders) with something still outstanding.
+    async function openLines(entityRe, label) {
+        const entity = names.find(n => entityRe.test(n));
+        if (!entity) throw new Error("page not published");
+        const sample = await bcFetch(odata + entity + "?$top=1");
+        const fields = (sample.value && sample.value[0]) ? Object.keys(sample.value[0]) : [];
+        const fDoc = bcPickField(fields, ["documentType"]);
+        const fOut = bcPickField(fields, ["outstandingQuantity"]);
+        if (!fOut) throw new Error(entity + " has no outstanding quantity field");
+        let filter = fOut + " gt 0";
+        if (fDoc) filter = fDoc + " eq 'Order' and " + filter;
+        return bcFetchAll(odata + entity + "?$filter=" + encodeURIComponent(filter), label);
+    }
+
+    // ---- Open purchase order lines ----
+    try {
+        const rows = await openLines(/^purchaseDocumentLines$/i, "Open purchase order lines");
+        out.po = [];
+        for (const r of rows) {
+            if (str(r.type).toLowerCase() !== "item" || !str(r.number)) continue;
+            if (r.documentType && str(r.documentType) !== "Order") continue;
+            const per = num(r.qtyPerUnitOfMeasure) || 1;
+            const outBase = num(r.outstandingQtyBase) || num(r.outstandingQuantity) * per;
+            if (outBase <= 0) continue;
+            out.po.push([str(r.documentNumber), str(r.buyFromVendorNumber), str(r.number), str(r.locationCode) || "DEFAULT",
+                num(r.quantityBase) || num(r.quantity) * per, outBase, num(r.qtyReceivedBase) || num(r.quantityReceived) * per,
+                Math.round(num(r.unitCostLcy) / per * 10000) / 10000, day(r.expectedReceiptDate), str(r.description),
+                Math.round(num(r.outstandingAmtExVatLcy) * 100) / 100]);
+        }
+        out.diagnostics.po = out.po.length + " open purchase order lines";
+    } catch (e) { out.diagnostics.po = "open purchase order lines unavailable — " + e.message; }
+
+    // ---- Purchase order headers (order date, vendor name) ----
+    try {
+        const rows = await bcFetchAll(api + "purchaseOrders?$select=number,orderDate,vendorNumber,vendorName,status,currencyCode", "Purchase orders");
+        out.poHead = {};
+        for (const r of rows) {
+            out.poHead[str(r.number)] = { od: day(r.orderDate), vn: str(r.vendorName), st: str(r.status), cur: str(r.currencyCode) };
+            if (str(r.vendorNumber) && str(r.vendorName)) out.vn[str(r.vendorNumber)] = str(r.vendorName);
+        }
+        out.diagnostics.poHead = rows.length + " purchase orders";
+    } catch (e) { out.diagnostics.poHead = "purchase order headers unavailable — " + e.message; }
+
+    // ---- Open sales order lines + customer names ----
+    try {
+        const rows = await openLines(/^salesDocumentLines$/i, "Open sales order lines");
+        out.so = [];
+        for (const r of rows) {
+            if (str(r.type).toLowerCase() !== "item" || !str(r.number)) continue;
+            if (r.documentType && str(r.documentType) !== "Order") continue;
+            const per = num(r.qtyPerUnitOfMeasure) || 1;
+            const outBase = num(r.outstandingQtyBase) || num(r.outstandingQuantity) * per;
+            if (outBase <= 0) continue;
+            out.so.push([str(r.documentNumber), str(r.sellToCustomerNumber), str(r.number), str(r.locationCode) || "DEFAULT",
+                outBase, day(r.shipmentDate)]);
+        }
+        out.diagnostics.so = out.so.length + " open sales order lines";
+    } catch (e) { out.diagnostics.so = "open sales order lines unavailable — " + e.message; }
+    try {
+        const rows = await bcFetchAll(api + "salesOrders?$select=number,customerName", "Sales orders");
+        out.soHead = {};
+        for (const r of rows) out.soHead[str(r.number)] = str(r.customerName);
+        out.diagnostics.soHead = rows.length + " sales orders";
+    } catch (e) { out.diagnostics.soHead = "sales order headers unavailable — " + e.message; }
+
+    // ---- Posted purchase receipts (lead time, on-time) ----
+    try {
+        const head = "purchaseReceipts?$select=number,postingDate,invoiceDate,vendorNumber,vendorName,orderNumber&$expand=purchaseReceiptLines";
+        let rows;
+        try { rows = await bcFetchAll(api + head + "($select=lineType,lineObjectNumber,quantity,expectedReceiptDate)", "Purchase receipts"); }
+        catch (e1) { rows = await bcFetchAll(api + head, "Purchase receipts"); }
+        out.rc = [];
+        for (const r of rows) {
+            if (str(r.vendorNumber) && str(r.vendorName)) out.vn[str(r.vendorNumber)] = str(r.vendorName);
+            for (const l of (r.purchaseReceiptLines || [])) {
+                if (str(l.lineType).toLowerCase() !== "item" || !str(l.lineObjectNumber) || num(l.quantity) === 0) continue;
+                out.rc.push([day(r.postingDate), str(r.vendorNumber), str(r.orderNumber), day(r.invoiceDate),
+                    str(l.lineObjectNumber), num(l.quantity), day(l.expectedReceiptDate)]);
+            }
+        }
+        out.diagnostics.rc = rows.length + " receipts, " + out.rc.length + " item lines";
+    } catch (e) { out.diagnostics.rc = "purchase receipts unavailable — " + e.message; }
+
+    // ---- Invoiced purchase cost (spend, price changes) ----
+    // Value entries are in local currency whatever the vendor's currency.
+    // $filter only, no $select (this tenant drops filters next to a $select);
+    // the entry type is re-checked here in case the filter is ignored.
+    try {
+        const entity = names.find(n => /^ValueEntriesFull$/i.test(n));
+        if (!entity) throw new Error("ValueEntriesFull page not published");
+        const rows = await bcFetchAll(odata + entity + "?$filter=" + encodeURIComponent("Item_Ledger_Entry_Type eq 'Purchase'"), "Purchase cost entries");
+        out.inv = [];
+        let other = 0;
+        for (const r of rows) {
+            if (str(r.Item_Ledger_Entry_Type) !== "Purchase") { other++; continue; }
+            if (str(r.Entry_Type) !== "Direct Cost" || str(r.Item_Charge_No) || str(r.Source_Type) !== "Vendor") continue;
+            const q = num(r.Invoiced_Quantity), amt = num(r.Cost_Amount_Actual);
+            if (q === 0 || !str(r.Item_No)) continue;
+            out.inv.push([day(r.Posting_Date), str(r.Source_No), str(r.Item_No), q, Math.round(amt * 100) / 100]);
+        }
+        out.diagnostics.inv = out.inv.length + " invoiced purchase lines from " + rows.length + " cost entries" + (other ? " (" + other + " non-purchase rows skipped)" : "");
+    } catch (e) { out.diagnostics.inv = "invoiced purchase cost unavailable — " + e.message; }
+
+    // ---- Unit cost per item ----
+    try {
+        const rows = await bcFetchAll(api + "items?$select=number,unitCost", "Item costs");
+        out.cost = {};
+        for (const r of rows) { const c = num(r.unitCost); if (c > 0 && str(r.number)) out.cost[str(r.number)] = Math.round(c * 10000) / 10000; }
+        out.diagnostics.cost = Object.keys(out.cost).length + " items with a unit cost";
+    } catch (e) { out.diagnostics.cost = "item costs unavailable — " + e.message; }
+
+    // ---- Open transfer orders (stock already moving between branches) ----
+    try {
+        const hEnt = names.find(n => /^Transfer_Order_Excel$/i.test(n));
+        const lEnt = names.find(n => /^Transfer_Order_ExcelTransferLines$/i.test(n));
+        if (!hEnt || !lEnt) throw new Error("transfer order pages not published");
+        const heads = {};
+        const transit = {};
+        for (const h of await bcFetchAll(odata + hEnt, "Transfer orders")) {
+            heads[str(h.No)] = [str(h.Transfer_from_Code), str(h.Transfer_to_Code)];
+            if (str(h.In_Transit_Code)) transit[str(h.In_Transit_Code)] = 1;
+        }
+        out.tr = [];
+        for (const l of await bcFetchAll(odata + lEnt, "Transfer lines")) {
+            const h = heads[str(l.Document_No)];
+            const left = num(l.Quantity) - num(l.Quantity_Received);
+            if (!h || !str(l.Item_No) || left <= 0) continue;
+            out.tr.push([str(l.Document_No), h[0], h[1], str(l.Item_No), left, day(l.Receipt_Date)]);
+        }
+        out.transit = Object.keys(transit);
+        out.diagnostics.tr = out.tr.length + " open transfer lines";
+    } catch (e) { out.diagnostics.tr = "transfer orders unavailable — " + e.message; }
+
+    return out;
+}
+
 // Node (snapshot robot) — browsers ignore this block.
 if (typeof module !== "undefined" && module.exports) {
     module.exports = {
         BC_CONFIG, BC_TENANT_DOMAIN, BC_API_BASE, BC_API_URL, BC_ODATA_URL, SP_CONFIG, GRAPH_SCOPES,
         WIISE_LEDGER_FROM,
         bcFetch, bcFetchAll, bcGetCompanyId, bcResetCompanyId,
-        bcFetchLedgerEntries, bcFetchItems, bcFetchVendors, bcFetchLocationData, bcFetchItemUom,
+        bcFetchLedgerEntries, bcFetchItems, bcFetchVendors, bcFetchLocationData, bcFetchItemUom, bcFetchProcurement,
     };
 }

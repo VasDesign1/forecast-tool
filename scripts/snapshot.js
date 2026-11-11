@@ -223,6 +223,30 @@ let chosen = null;   // visible to the failure handler below
     console.log("Publishing to SharePoint…");
     await SP.publishSnapshot(slot, bin, metaJson);
     console.log("Published " + slot + " to SharePoint");
+
+    // ---- Purchasing data for the procurement tabs (procure.js) ----
+    // A separate file, so only the people who see those tabs ever download
+    // it. Strictly an extra: the snapshot above is already published, and
+    // nothing in here may fail the run.
+    try {
+        const t1 = Date.now();
+        const proc = await F.bcFetchProcurement();
+        console.log("Purchasing data fetched in " + ((Date.now() - t1) / 1000).toFixed(1) + "s:", JSON.stringify(proc.diagnostics));
+        if (!proc.po && !proc.so && !proc.rc && !proc.inv) throw new Error("no purchasing data came back");
+        const pJson = Buffer.from(JSON.stringify({
+            meta: { formatVersion: 1, slot, fetchedAtUtc: new Date().toISOString(), fetchedAtMelbourne: payload.meta.fetchedAtMelbourne },
+            data: proc,
+        }), "utf8");
+        const pSalt = crypto.randomBytes(16), pIv = crypto.randomBytes(12);
+        const pKey = crypto.pbkdf2Sync(PASSPHRASE, pSalt, PBKDF2_ITERATIONS, 32, "sha256");
+        const pCipher = crypto.createCipheriv("aes-256-gcm", pKey, pIv);
+        const pBin = Buffer.concat([pSalt, pIv, pCipher.update(zlib.gzipSync(pJson, { level: 9 })), pCipher.final(), pCipher.getAuthTag()]);
+        const driveId = await SP.resolveDrive(F.SP_CONFIG.host);
+        await SP.uploadFile(driveId, F.SP_CONFIG.folder + "/snapshots/procure.bin", pBin);
+        console.log("Published procure.bin (" + (pBin.length / 1048576).toFixed(2) + " MB)");
+    } catch (e) {
+        console.warn("Purchasing data NOT published (the snapshot itself is fine): " + e.message);
+    }
 })().catch(e => {
     const mel = melbourneNow();
     const manual = !!(process.env.SLOT || "").trim() || BY_HAND;
